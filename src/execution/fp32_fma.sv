@@ -59,8 +59,9 @@ module fp32_fma(
     assign alignment_round = (exp_diff >= 2 && exp_diff < 24)
                              ? shift_source[exp_diff-2] : 1'b0;
     
-    assign alignment_sticky = (exp_diff >= 3 && exp_diff < 24)
-                              ? |shift_source[exp_diff-3:0] : 1'b0;
+    assign alignment_sticky = (exp_diff >= 24) ? |shift_source
+                              : (exp_diff >= 3) ? |(shift_source & ~(24'hFFFFFF << (exp_diff - 3)))
+                              : 1'b0;
 
     assign mant3_aligned = product_ge_addened
                            ? (exp_diff >= 24) ? 24'b0 : (mant3 >> exp_diff)
@@ -142,9 +143,9 @@ module fp32_fma(
     wire norm_guard, norm_round, norm_sticky;
 
     assign lz_count = count_leading_zeros(result_add[23:0]);
-    assign is_true_zero = (lz_count == 24);
-    
     assign overflow = result_add[24];
+    assign is_true_zero = (!overflow && lz_count[4] && lz_count[3]); // lz_count[4] && lz_count[3] is only 1 if lz_count = 24
+
     assign result_norm = overflow
                          ? result_add[24:1]
                          : is_true_zero ? 24'b0 : (result_add[23:0] << lz_count);
