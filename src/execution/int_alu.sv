@@ -12,7 +12,14 @@ module int_alu (
     input wire [15:0] offset,
     output reg valid_out,
     output reg branch_taken,
-    output reg [31:0] result
+    output reg [31:0] result,
+
+    // Input warp_id, thread_slot, and dest_register for writeback_arbiter
+    input wire [9:0] reg_bank_addr_in,
+
+    // Output warp_id, thread_slot, and dest_register for writeback_arbiter
+    // This is simply the input passed to the output
+    output wire [9:0] reg_bank_addr_out
 );
     // Define parameters for instruction types
     localparam R_TYPE = 3'b000, I_TYPE = 3'b001, FMA = 3'b010, BRANCH = 3'b011, SPECIAL = 3'b100, DONE = 3'b111;
@@ -69,4 +76,8 @@ module int_alu (
             endcase
         end
     end
+
+    assign warp_id_out = warp_id_in;
+    assign thread_slot_out = thread_slot_in;
+    assign dest_reg_out = dest_reg_in;
 endmodule

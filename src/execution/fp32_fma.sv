@@ -1,12 +1,24 @@
+`default_nettype none
 module fp32_fma(
-    input clk,
-    input reset,
-    input valid_in,
-    input [31:0] src1,
-    input [31:0] src2,
-    input [31:0] src3,
-    output [31:0] result,
-    output valid_out
+    input wire clk,
+    input wire reset,
+    input wire valid_in,
+
+    // Input source registers
+    input wire [31:0] src1,
+    input wire [31:0] src2,
+    input wire [31:0] src3,
+
+    // Input warp_id, thread_slot, and dest_register for writeback_arbiter
+    input wire [9:0] reg_bank_addr_in,
+
+    // Result
+    output wire [31:0] result,
+    output wire valid_out,
+
+    // Output warp_id, thread_slot, and dest_register for writeback_arbiter
+    // This is simply the input passed to the output
+    output wire [9:0] reg_bank_addr_out
 );
     // unpack sources into sign, exponent, and mantissa
 
@@ -201,4 +213,6 @@ module fp32_fma(
     assign result = {add_sign, result_exp, result_mant[22:0]};
 
     assign valid_out = valid_in;
+
+    assign reg_bank_addr_out = reg_bank_addr_in,;
 endmodule
