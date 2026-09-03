@@ -25,8 +25,16 @@ module int_alu (
     localparam R_TYPE = 3'b000, I_TYPE = 3'b001, FMA = 3'b010, BRANCH = 3'b011, SPECIAL = 3'b100, DONE = 3'b111;
 
     // Define parameters for specific instructions
-    localparam [2:0] NOP = 3'b000, ADD  = 3'b001, SUB  = 3'b010, AND  = 3'b011, OR  = 3'b100, SLT  = 3'b101, MUL = 3'b110, DIV = 3'b111;
-    localparam [2:0] LUI = 3'b000, ADDI = 3'b001, SUBI = 3'b010, ANDI = 3'b011, ORI = 3'b100, SLTI = 3'b101, LOAD = 3'b110, STORE = 3'b111;
+    // R-type instructions
+    localparam [2:0] NOP = 3'b000, ADD  = 3'b001, SUB  = 3'b010, MUL = 3'b011
+    localparam [2:0] AND  = 3'b100, OR  = 3'b101, SLT  = 3'b110;
+
+    // I-type instructions
+    localparam [2:0] LUI = 3'b000, ADDI = 3'b001, SUBI = 3'b010;
+    localparam [2:0] ANDI = 3'b011, ORI = 3'b100, SLTI = 3'b101;
+    localparam [2:0] LOAD = 3'b110, STORE = 3'b111;
+
+    // Branch instructions
     localparam [2:0] BEQ = 3'b000, BNE = 3'b001, BLT = 3'b010, BGE = 3'b011;
 
     always_ff @(posedge clk) begin
@@ -43,11 +51,10 @@ module int_alu (
                     NOP : result <= 32'b0;
                     ADD : result <= src1 + src2;
                     SUB : result <= src1 - src2;
+                    MUL : result <= src1 * src2;
                     AND : result <= src1 & src2;
                     OR  : result <= src1 | src2;
                     SLT : result <= $signed(src1) < $signed(src2);
-                    MUL : result <= src1 * src2;
-                    DIV : result <= src1 / src2;
                     default: result <= 32'b0;
                 endcase
 
@@ -79,5 +86,5 @@ module int_alu (
 
     assign warp_id_out = warp_id_in;
     assign thread_slot_out = thread_slot_in;
-    assign dest_reg_out = dest_reg_in;
+    assign reg_bank_addr_out = reg_bank_addr_in;
 endmodule

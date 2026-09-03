@@ -47,13 +47,47 @@ module fp32_fma(
     assign exp_mul = exp1 + exp2 - 127;
     assign sign_mul = sign1 ^ sign2;
 
+    reg valid_mul_q;
+    reg [47:0] mant_mul_q;
+    reg [8:0] exp_mul_q;
+    reg sign_mul_q;
+    reg [9:0] reg_bank_addr_q;
+    reg [23:0] mant3_q;
+    reg [7:0] exp3_q;
+    reg sign3_q;
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            valid_mul_q <= 1'b0;
+            mant_mul_q <= 48'b0;
+            exp_mul_q <= 9'b0;
+            sign_mul_q <= 1'b0;
+            reg_bank_addr_q <= 10'b0;
+            mant3_q <= 24'b0;
+            exp3_q <= 8'b0;
+            sign3_q <= 1'b0;
+        end else begin
+            valid_mul_q <= valid_in;
+            mant_mul_q <= mant_mul;
+            exp_mul_q <= exp_mul;
+            sign_mul_q <= sign_mul;
+            reg_bank_addr_q <= reg_bank_addr_in;
+            mant3_q <= mant3;
+            exp3_q <= exp3;
+            sign3_q <= sign3;
+        end
+    end
+
     // Normalize the product before alignment
-    wire mant_mul_overflow = mant_mul[47];  // 1 if product >= 2.0
+    wire mant_mul_overflow;
+    wire [22:0] mant_mul_norm_frac;
+    wire [23:0] mant_mul_norm;
+    wire [8:0] exp_mul_norm;
 
-    wire [22:0] mant_mul_norm_frac = mant_mul_overflow ? mant_mul[46:24] : mant_mul[45:23];
-    wire [23:0] mant_mul_norm = {1'b1, mant_mul_norm_frac};  // always proper 1.xxx, 24 bits
-
-    wire [8:0] exp_mul_norm = mant_mul_overflow ? (exp_mul + 9'd1) : exp_mul;
+    assign mant_mul_overflow = mant_mul_q[47];  // 1 if product >= 2.0
+    assign mant_mul_norm_frac = mant_mul_overflow ? mant_mul_q[46:24] : mant_mul_q[45:23];
+    assign mant_mul_norm = {1'b1, mant_mul_norm_frac};  // always proper 1.xxx, 24 bits
+    assign exp_mul_norm = mant_mul_overflow ? (exp_mul_q + 9'd1) : exp_mul_q;
 
     // Alignment
     wire product_ge_addened;
@@ -61,9 +95,9 @@ module fp32_fma(
     wire [23:0] mant3_aligned, mant_mul_aligned, shift_source;
     wire alignment_guard, alignment_round, alignment_sticky;
     
-    assign product_ge_addened = (exp_mul_norm >= exp3);
-    assign exp_diff = product_ge_addened ? (exp_mul_norm - exp3) : (exp3 - exp_mul_norm);
-    assign shift_source = product_ge_addened ? mant3 : mant_mul_norm;
+    assign product_ge_addened = (exp_mul_norm >= exp3_q);
+    assign exp_diff = product_ge_addened ? (exp_mul_norm - exp3_q) : (exp3_q - exp_mul_norm);
+    assign shift_source = product_ge_addened ? mant3_q : mant_mul_norm;
 
     assign alignment_guard = (exp_diff >= 1 && exp_diff < 24)
                              ? shift_source[exp_diff-1] : 1'b0;
@@ -76,39 +110,98 @@ module fp32_fma(
                               : 1'b0;
 
     assign mant3_aligned = product_ge_addened
-                           ? (exp_diff >= 24) ? 24'b0 : (mant3 >> exp_diff)
-                           : mant3;
+                           ? (exp_diff >= 24) ? 24'b0 : (mant3_q >> exp_diff)
+                           : mant3_q;
 
     assign mant_mul_aligned = product_ge_addened
                            ? mant_mul_norm
                            : (exp_diff >= 24) ? 24'b0 : (mant_mul_norm >> exp_diff);
 
-    assign exp_aligned = product_ge_addened ? exp_mul_norm : exp3;
+    assign exp_aligned = product_ge_addened ? exp_mul_norm : exp3_q;
+
+    reg valid_aligned_q;
+    reg sign_aligned_q;
+    reg sign3_aligned_q;
+    reg [23:0] mant3_aligned_q;
+    reg [23:0] mant_mul_aligned_q;
+    reg [8:0] exp_aligned_q;
+    reg alignment_guard_q;
+    reg alignment_round_q;
+    reg alignment_sticky_q;
+    reg [9:0] reg_bank_addr_aligned_q;
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            valid_aligned_q <= 1'b0;
+            sign3_aligned_q <= 1'b0;
+            sign_aligned_q <= 1'b0;
+            mant3_aligned_q <= 24'b0;
+            mant_mul_aligned_q <= 24'b0;
+            exp_aligned_q <= 9'b0;
+            alignment_guard_q <= 1'b0;
+            alignment_round_q <= 1'b0;
+            alignment_sticky_q <= 1'b0;
+            reg_bank_addr_aligned_q <= 10'b0;
+        end else begin
+            valid_aligned_q <= valid_mul_q;
+            sign3_aligned_q <= sign3_q;
+            sign_aligned_q <= sign_mul_q;
+            mant3_aligned_q <= mant3_aligned;
+            mant_mul_aligned_q <= mant_mul_aligned;
+            exp_aligned_q <= exp_aligned;
+            alignment_guard_q <= alignment_guard;
+            alignment_round_q <= alignment_round;
+            alignment_sticky_q <= alignment_sticky;
+            reg_bank_addr_aligned_q <= reg_bank_addr_q;
+        end
+    end
 
     // Adding multiplicand and addend
-    wire add_sign, same_sign, mul_ge_addend;
+    wire sign_add, same_sign, mul_ge_addend;
     wire [24:0] addition, result_add;
     wire [23:0] subtraction;
     wire [8:0] add_exp;
 
-    wire add_guard  = alignment_guard;
-    wire add_round  = alignment_round;
-    wire add_sticky = alignment_sticky;
+    assign same_sign = (sign3_aligned_q == sign_aligned_q);
+    assign mul_ge_addend = (mant_mul_aligned_q >= mant3_aligned_q);
 
-    assign same_sign = (sign3 == sign_mul);
-    assign mul_ge_addend = (mant_mul_aligned >= mant3_aligned);
-
-    assign addition = mant_mul_aligned + mant3_aligned;
+    assign addition = mant_mul_aligned_q + mant3_aligned_q;
     assign subtraction = mul_ge_addend
-                         ? mant_mul_aligned - mant3_aligned
-                         : mant3_aligned - mant_mul_aligned;
+                         ? mant_mul_aligned_q - mant3_aligned_q
+                         : mant3_aligned_q - mant_mul_aligned_q;
     
     assign result_add = same_sign ? addition : {1'b0, subtraction};
-    assign add_sign = same_sign
-                         ? sign_mul
-                         : (mul_ge_addend ? sign_mul : sign3);
+    assign sign_add = same_sign
+                         ? sign_aligned_q
+                         : (mul_ge_addend ? sign_aligned_q : sign3_aligned_q);
     
-    assign add_exp = exp_aligned;
+    reg [24:0] mant_add_q;
+    reg [8:0] exp_add_q;
+    reg sign_add_q, valid_add_q;
+    reg guard_add_q, round_add_q, sticky_add_q;
+    reg [9:0] reg_bank_addr_add_q;
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            valid_add_q <= 1'b0;
+            mant_add_q <= 25'b0;
+            exp_add_q <= 9'b0;
+            sign_add_q <= 1'b0;
+            guard_add_q <= 1'b0;
+            round_add_q <= 1'b0;
+            sticky_add_q <= 1'b0;
+            reg_bank_addr_add_q <= 10'b0;
+        end else begin
+            valid_add_q <= valid_aligned_q;
+            mant_add_q <= result_add;
+            exp_add_q <= exp_aligned_q;
+            sign_add_q <= sign_add;
+            guard_add_q <= alignment_guard_q;
+            round_add_q <= alignment_round_q;
+            sticky_add_q <= alignment_sticky_q;
+            reg_bank_addr_add_q <= reg_bank_addr_aligned_q;
+        end
+    end
 
     function automatic [4:0] count_leading_zeros(input [23:0] val);
         begin
@@ -150,27 +243,23 @@ module fp32_fma(
     wire [7:0] result_exp_final;
     wire [4:0] lz_count;
     wire is_true_zero;
-    wire overflow_new_guard, overflow_new_sticky;
 
     wire norm_guard, norm_round, norm_sticky;
 
-    assign lz_count = count_leading_zeros(result_add[23:0]);
-    assign overflow = result_add[24];
+    assign lz_count = count_leading_zeros(mant_add_q[23:0]);
+    assign overflow = mant_add_q[24];
     assign is_true_zero = (!overflow && lz_count[4] && lz_count[3]); // lz_count[4] && lz_count[3] is only 1 if lz_count = 24
 
     assign result_norm = overflow
-                         ? result_add[24:1]
-                         : is_true_zero ? 24'b0 : (result_add[23:0] << lz_count);
+                         ? mant_add_q[24:1]
+                         : is_true_zero ? 24'b0 : (mant_add_q[23:0] << lz_count);
 
     assign result_exp_norm = overflow
-                             ? (add_exp + 1) :
-                             is_true_zero ? 9'b0  : (add_exp - lz_count);
+                             ? (exp_add_q + 1) :
+                             is_true_zero ? 9'b0  : (exp_add_q - lz_count);
     
-    assign exp_underflow = !overflow && (lz_count >= add_exp); // negative (sign bit set on 9-bit) or exactly 0
+    assign exp_underflow = !overflow && (lz_count >= exp_add_q); // negative (sign bit set on 9-bit) or exactly 0
     assign exp_overflow  = overflow && (result_exp_norm > 9'd255);
-
-    assign overflow_new_guard  = result_add[0];
-    assign overflow_new_sticky = add_guard | add_round | add_sticky; // everything previously tracked, OR'd together
 
     assign result_norm_final = (is_true_zero || exp_underflow) ? 24'b0
                                       : exp_overflow ? 24'b0  // infinity: mantissa forced 0
@@ -178,9 +267,45 @@ module fp32_fma(
 
     assign result_exp_final = (is_true_zero || exp_underflow) ? 8'b0 : result_exp_norm[7:0]; // overflow is handled after rounding
     
-    assign norm_guard  = overflow ? result_add[0] : add_guard;
-    assign norm_round  = overflow ? 1'b0 : add_round;
-    assign norm_sticky = overflow ? (add_guard | add_round | add_sticky) : add_sticky;
+    assign norm_guard  = overflow ? mant_add_q[0] : guard_add_q;
+    assign norm_round  = overflow ? 1'b0 : round_add_q;
+    assign norm_sticky = overflow ? (guard_add_q | round_add_q | sticky_add_q) : sticky_add_q;
+
+    reg [23:0] norm_mant_q;
+    reg [7:0] norm_exp_q;
+    reg [9:0] norm_reg_bank_addr_q;
+    reg norm_sign_q, norm_valid_q;
+    reg norm_guard_q, norm_round_q, norm_sticky_q;
+    reg norm_exp_underflow_q, norm_exp_overflow_q;
+    reg norm_is_true_zero_q;
+
+    always_ff @(posedge clk or posedge reset) begin
+        if (reset) begin
+            norm_mant_q <= 24'b0;
+            norm_exp_q <= 8'b0;
+            norm_sign_q <= 1'b0;
+            norm_valid_q <= 1'b0;
+            norm_guard_q <= 1'b0;
+            norm_round_q <= 1'b0;
+            norm_sticky_q <= 1'b0;
+            norm_exp_underflow_q <= 1'b0;
+            norm_exp_overflow_q <= 1'b0;
+            norm_reg_bank_addr_q <= 10'b0;
+            norm_is_true_zero_q <= 1'b0;
+        end else begin
+            norm_mant_q <= result_norm_final;
+            norm_exp_q <= result_exp_final;
+            norm_sign_q <= sign_add_q;
+            norm_valid_q <= valid_add_q;
+            norm_guard_q <= norm_guard;
+            norm_round_q <= norm_round;
+            norm_sticky_q <= norm_sticky;
+            norm_exp_underflow_q <= exp_underflow;
+            norm_exp_overflow_q <= exp_overflow;
+            norm_reg_bank_addr_q <= reg_bank_addr_add_q;
+            norm_is_true_zero_q <= is_true_zero;
+        end
+    end
 
     // Rounding
     wire round_up, rounding_overflow, final_exp_overflow, final_exp_underflow;
@@ -190,29 +315,32 @@ module fp32_fma(
 
     wire [23:0] result_mant;
     wire [7:0] result_exp;
+    wire result_sign;
     
-    assign round_up = norm_guard && (norm_round || norm_sticky || result_norm_final[0]);
-    assign result_round = result_norm_final + {23'b0, round_up};
+    assign round_up = norm_guard_q && (norm_round_q || norm_sticky_q || norm_mant_q[0]);
+    assign result_round = norm_mant_q + {23'b0, round_up};
     assign rounding_overflow = result_round[24];
 
     assign result_round_final = rounding_overflow ? {1'b1, 23'b0} : result_round;
-    assign result_exp_rounded = rounding_overflow ? ({1'b0, result_exp_final} + 9'd1) : result_exp_final;
+    assign result_exp_rounded = rounding_overflow ? ({1'b0, norm_exp_q} + 9'd1) : norm_exp_q;
 
-    assign final_exp_overflow  = exp_overflow || (!is_true_zero && !exp_underflow && (result_exp_rounded > 9'd255));
-    assign final_exp_underflow = exp_underflow;
+    assign final_exp_overflow  = norm_exp_overflow_q || (!norm_is_true_zero_q && !norm_exp_underflow_q && (result_exp_rounded > 9'd255));
+    assign final_exp_underflow = norm_exp_underflow_q;
 
-    assign result_mant = (is_true_zero || final_exp_underflow) ? 24'b0
+    assign result_mant = (norm_is_true_zero_q || final_exp_underflow) ? 24'b0
                                   : final_exp_overflow ? 24'b0
                                   : result_round_final;
 
-    assign result_exp = (is_true_zero || final_exp_underflow) ? 8'b0
+    assign result_exp = (norm_is_true_zero_q || final_exp_underflow) ? 8'b0
                                : final_exp_overflow ? 8'hFF
                                : result_exp_rounded[7:0];
+    
+    assign result_sign = norm_is_true_zero_q ? 1'b0 : norm_sign_q;
 
     // Pack normalized results
-    assign result = {add_sign, result_exp, result_mant[22:0]};
+    assign result = {result_sign, result_exp, result_mant[22:0]};
 
-    assign valid_out = valid_in;
+    assign valid_out = norm_valid_q;
 
-    assign reg_bank_addr_out = reg_bank_addr_in,;
+    assign reg_bank_addr_out = norm_reg_bank_addr_q;
 endmodule
