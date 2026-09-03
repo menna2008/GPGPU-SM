@@ -26,8 +26,9 @@ module int_alu (
 
     // Define parameters for specific instructions
     // R-type instructions
-    localparam [2:0] NOP = 3'b000, ADD  = 3'b001, SUB  = 3'b010, MUL = 3'b011
-    localparam [2:0] AND  = 3'b100, OR  = 3'b101, SLT  = 3'b110;
+    localparam [2:0] NOP = 3'b000, ADD  = 3'b001, SUB  = 3'b010;
+    localparam [2:0] AND  = 3'b011, OR  = 3'b100, SLT = 3'b101;
+    localparam [2:0] MUL = 3'b110;
 
     // I-type instructions
     localparam [2:0] LUI = 3'b000, ADDI = 3'b001, SUBI = 3'b010;
@@ -35,7 +36,8 @@ module int_alu (
     localparam [2:0] LOAD = 3'b110, STORE = 3'b111;
 
     // Branch instructions
-    localparam [2:0] BEQ = 3'b000, BNE = 3'b001, BLT = 3'b010, BGE = 3'b011;
+    localparam [2:0] BEQ = 3'b000, BNE = 3'b001;
+    localparam [2:0] BLT = 3'b010, BGE = 3'b011;
 
     always_ff @(posedge clk) begin
         if (reset) begin
