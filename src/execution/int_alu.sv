@@ -86,7 +86,5 @@ module int_alu (
         end
     end
 
-    assign warp_id_out = warp_id_in;
-    assign thread_slot_out = thread_slot_in;
     assign reg_bank_addr_out = reg_bank_addr_in;
 endmodule
