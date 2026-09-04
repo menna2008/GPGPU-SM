@@ -1,25 +1,25 @@
 `default_nettype none
 module int_alu (
-    input wire clk,
-    input wire reset,
-    input wire valid_in,
-    input wire [5:0] opcode,
-    input wire [31:0] src1,
-    input wire [31:0] src2,
+    input logic clk,
+    input logic reset,
+    input logic valid_in,
+    input logic [5:0] opcode,
+    input logic [31:0] src1,
+    input logic [31:0] src2,
     
     // PC and offset for branch instructions
-    input wire [31:0] PC,
-    input wire [15:0] offset,
-    output reg valid_out,
-    output reg branch_taken,
-    output reg [31:0] result,
+    input logic [31:0] PC,
+    input logic [15:0] offset,
+    output logic valid_out,
+    output logic branch_taken,
+    output logic [31:0] result,
 
     // Input warp_id, thread_slot, and dest_register for writeback_arbiter
-    input wire [9:0] reg_bank_addr_in,
+    input logic [9:0] reg_bank_addr_in,
 
     // Output warp_id, thread_slot, and dest_register for writeback_arbiter
     // This is simply the input passed to the output
-    output wire [9:0] reg_bank_addr_out
+    output logic [9:0] reg_bank_addr_out
 );
     // Define parameters for instruction types
     localparam R_TYPE = 3'b000, I_TYPE = 3'b001, FMA = 3'b010, BRANCH = 3'b011, SPECIAL = 3'b100, DONE = 3'b111;

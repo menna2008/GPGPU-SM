@@ -2,23 +2,23 @@ module result_fifo #(
     parameter int DEPTH = 2,
     parameter int COUNT_DEPTH = $clog2(DEPTH+1)
 ) (
-    input wire clk,
-    input wire reset,
+    input logic clk,
+    input logic reset,
 
-    input wire push,
-    input wire [9:0] push_addr,
-    input wire [31:0] push_data,
+    input logic push,
+    input logic [9:0] push_addr,
+    input logic [31:0] push_data,
 
-    input wire pop,
+    input logic pop,
 
-    output wire [9:0] head_addr,
-    output wire [31:0] head_data,
-    output wire empty,
-    output wire full
+    output logic [9:0] head_addr,
+    output logic [31:0] head_data,
+    output logic empty,
+    output logic full
 );
-    reg [9:0] addr_q [0:DEPTH-1];
-    reg [31:0] data_q [0:DEPTH-1];
-    reg [COUNT_DEPTH-1:0] count_q;
+    logic [9:0] addr_q [0:DEPTH-1];
+    logic [31:0] data_q [0:DEPTH-1];
+    logic [COUNT_DEPTH-1:0] count_q;
 
     integer i;
 
