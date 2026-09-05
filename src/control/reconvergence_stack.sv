@@ -2,7 +2,6 @@ module recon_stack # (
     parameter int DEPTH = 8,
     parameter int POINTER_DEPTH = $clog2(DEPTH + 1)
 ) (
-    input logic clk,
     input logic reset,
 
     // Kernel launch
@@ -13,12 +12,11 @@ module recon_stack # (
 
     // Divergent branch resolution
     input logic push2_valid,
-    input logic [31:0] push2_branch_pc,
     input logic [31:0] push2_mask_taken,
     input logic [31:0] push2_mask_not_taken,
     input logic [31:0] push2_pc_taken,
     input logic [31:0] push2_pc_fallthrough,
-    input logic [5:0] push2_pc_recon_offset,
+    input logic [31:0] push2_recon_pc,
     
     input logic current_pc_valid, // asserted by whatever drives current_pc, only when this warp is selected
     input logic [31:0] current_pc, // fetch_stage's PC for this warp, compared against top's reconverge_pc
@@ -36,7 +34,6 @@ module recon_stack # (
     logic [31:0] masks [0:DEPTH-1];
     logic [31:0] pcs [0:DEPTH-1];
     logic [31:0] recon_pcs [0:DEPTH-1];
-    logic [31:0] curr_recon_pc;
     logic [POINTER_DEPTH-1:0] next_free, top_valid, next_free_plus1;
 
     logic pop_valid;
@@ -48,13 +45,12 @@ module recon_stack # (
 
     assign top_valid = next_free - 1;
     assign next_free_plus1 = next_free + 1;
-    assign curr_recon_pc = push2_branch_pc + {{26{push2_pc_recon_offset[5]}}, push2_pc_recon_offset};
 
     // Skip pushing a branch whose PC already equals the reconvergence point
     // That branch has an empty body and would pop again immediately anyway
 
-    assign skip_taken = (push2_pc_taken == curr_recon_pc || ~|push2_mask_taken);
-    assign skip_not_taken = (push2_pc_fallthrough == curr_recon_pc || ~|push2_mask_not_taken);
+    assign skip_taken = (push2_pc_taken == push2_recon_pc || ~|push2_mask_taken);
+    assign skip_not_taken = (push2_pc_fallthrough == push2_recon_pc || ~|push2_mask_not_taken);
     assign push_count = (!skip_taken && !skip_not_taken) ? 2'd2 :
                         (skip_taken != skip_not_taken)   ? 2'd1 : 2'd0;
 
@@ -73,16 +69,16 @@ module recon_stack # (
                 recon_pcs[0] <= init_recon_pc;
                 next_free <= 'b1;
             end else if (push2_valid && !stack_full) begin
-                pcs[top_valid] <= curr_recon_pc;
+                pcs[top_valid] <= push2_recon_pc;
                 case (push_count)
                     2'd2: begin
                         masks[next_free] <= push2_mask_not_taken;
                         pcs[next_free] <= push2_pc_fallthrough;
-                        recon_pcs[next_free] <= curr_recon_pc;
+                        recon_pcs[next_free] <= push2_recon_pc;
 
                         masks[next_free_plus1] <= push2_mask_taken;
                         pcs[next_free_plus1] <= push2_pc_taken;
-                        recon_pcs[next_free_plus1] <= curr_recon_pc;
+                        recon_pcs[next_free_plus1] <= push2_recon_pc;
 
                         next_free <= next_free + 2;
                     end
@@ -90,11 +86,11 @@ module recon_stack # (
                         if (skip_not_taken) begin
                             masks[next_free] <= push2_mask_taken;
                             pcs[next_free] <= push2_pc_taken;
-                            recon_pcs[next_free] <= curr_recon_pc;
+                            recon_pcs[next_free] <= push2_recon_pc;
                         end else begin
                             masks[next_free] <= push2_mask_not_taken;
                             pcs[next_free] <= push2_pc_fallthrough;
-                            recon_pcs[next_free] <= curr_recon_pc;
+                            recon_pcs[next_free] <= push2_recon_pc;
                         end
                         next_free <= next_free + 1;
                     end
