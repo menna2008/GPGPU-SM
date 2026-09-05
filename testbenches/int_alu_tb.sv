@@ -1,7 +1,6 @@
 `timescale 1ns/1ps
 module tb_int_alu;
     logic clk;
-    logic reset;
     logic valid_in;
     logic [5:0] opcode;
     logic [31:0] src1, src2;
@@ -17,7 +16,6 @@ module tb_int_alu;
 
     int_alu DUT (
         .clk(clk),
-        .reset(reset),
         .valid_in(valid_in),
         .opcode(opcode),
         .src1(src1),

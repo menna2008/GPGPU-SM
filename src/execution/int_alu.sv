@@ -1,7 +1,6 @@
 `default_nettype none
 module int_alu (
     input logic clk,
-    input logic reset,
     input logic valid_in,
     input logic [5:0] opcode,
     input logic [31:0] src1,
