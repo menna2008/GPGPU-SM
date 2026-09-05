@@ -2,6 +2,7 @@ module recon_stack # (
     parameter int DEPTH = 8,
     parameter int POINTER_DEPTH = $clog2(DEPTH + 1)
 ) (
+    input logic clk,
     input logic reset,
 
     // Kernel launch
