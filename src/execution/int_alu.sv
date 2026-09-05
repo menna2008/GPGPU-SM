@@ -39,49 +39,49 @@ module int_alu (
     localparam [2:0] BEQ = 3'b000, BNE = 3'b001;
     localparam [2:0] BLT = 3'b010, BGE = 3'b011;
 
-    always_ff @(posedge clk) begin
+    always_comb begin
         if (reset) begin
-            valid_out <= 1'b0;
-            branch_taken <= 1'b0;
-            result <= 32'b0;
+            valid_out = 1'b0;
+            branch_taken = 1'b0;
+            result = 32'b0;
         end else begin
-            valid_out <= valid_in;
-            branch_taken <= 1'b0;
+            valid_out = valid_in;
+            branch_taken = 1'b0;
 
             case (opcode[5:3]) // case by opcode
                 R_TYPE : case (opcode[2:0]) // case by sub opcode
-                    NOP : result <= 32'b0;
-                    ADD : result <= src1 + src2;
-                    SUB : result <= src1 - src2;
-                    MUL : result <= src1 * src2;
-                    AND : result <= src1 & src2;
-                    OR  : result <= src1 | src2;
-                    SLT : result <= $signed(src1) < $signed(src2);
-                    default: result <= 32'b0;
+                    NOP : result = 32'b0;
+                    ADD : result = src1 + src2;
+                    SUB : result = src1 - src2;
+                    MUL : result = src1 * src2;
+                    AND : result = src1 & src2;
+                    OR  : result = src1 | src2;
+                    SLT : result = $signed(src1) < $signed(src2);
+                    default: result = 32'b0;
                 endcase
 
                 I_TYPE : case (opcode[2:0])
-                    LUI  : result <= {src1[15:0], 16'b0};
+                    LUI  : result = {src1[15:0], 16'b0};
                     LOAD, STORE,
-                    ADDI : result <= src1 + src2;
-                    SUBI : result <= src1 - src2;
-                    ANDI : result <= src1 & src2;
-                    ORI  : result <= src1 | src2;
-                    SLTI : result <= $signed(src1) < $signed(src2);
-                    default : result <= 32'b0;
+                    ADDI : result = src1 + src2;
+                    SUBI : result = src1 - src2;
+                    ANDI : result = src1 & src2;
+                    ORI  : result = src1 | src2;
+                    SLTI : result = $signed(src1) < $signed(src2);
+                    default : result = 32'b0;
                 endcase
 
                 BRANCH : begin
-                    result <= PC + $signed(offset);
+                    result = PC + {{22{offset[15]}}, offset[15:6]};
                     case (opcode[2:0])
-                        BEQ : branch_taken <= (src1 == src2);
-                        BNE : branch_taken <= (src1 != src2);
-                        BLT : branch_taken <= ($signed(src1) < $signed(src2));
-                        BGE : branch_taken <= ($signed(src1) >= $signed(src2));
+                        BEQ : branch_taken = (src1 == src2);
+                        BNE : branch_taken = (src1 != src2);
+                        BLT : branch_taken = ($signed(src1) < $signed(src2));
+                        BGE : branch_taken = ($signed(src1) >= $signed(src2));
                     endcase
                 end
                 
-                default : result <= 32'b0;
+                default : result = 32'b0;
             endcase
         end
     end
