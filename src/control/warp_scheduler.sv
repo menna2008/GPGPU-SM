@@ -1,0 +1,110 @@
+module warp_scheduler #(
+    parameter int NUM_WARPS = 8
+) (
+    input logic clk,
+    input logic reset,
+
+    input logic kernel_start,
+    input logic [2:0] num_warps,
+
+    input logic commit_done,
+    input logic [2:0] commit_warp_id,
+    input logic [NUM_WARPS-1:0] push2_done,
+
+    input logic decode_stall,
+    input logic coalescing_busy,
+
+    input logic [1:0] sub_warp_cycle,
+
+    input logic done_detect,
+
+    output logic [2:0] curr_warp,
+    output logic [2:0] next_warp,
+    output logic issue_valid,
+    output logic kernel_done
+);
+    // State for each warp
+    logic [NUM_WARPS-1:0] ready;
+    logic [NUM_WARPS-1:0] finished;
+
+    // ready_mask is computed combinationall to show which warps are ready
+    logic [NUM_WARPS-1:0] ready_mask;
+    always_comb begin
+        for (int i = 0; i < NUM_WARPS; i++) begin
+            ready_mask[i] = (ready[i] | push2_done[i] | (commit_done && i == commit_warp_id)) // ready
+                            & ~finished[i]                                                       // and not finished previously
+                            & ~(i == curr_warp & done_detect);                                // or this cycle
+        end
+    end
+
+    logic [2:0] picked_warp;
+    logic have_ready;
+    always_comb begin
+        have_ready = |ready_mask;
+        picked_warp = '0;
+        for (int i = NUM_WARPS-1; i >= 0; i--)
+            // If its ready and it not the warp they just finished then pick it
+            if (ready_mask[i]) picked_warp = i[2:0];
+    end
+
+    // GTO: stay on curr_warp if it's still ready and not stalled/busy, else switch.
+    logic [2:0] next_warp_d;
+    logic next_valid_d;
+    always_comb begin
+        if (ready_mask[curr_warp] && !decode_stall && !coalescing_busy) begin
+            next_warp_d = curr_warp;
+            next_valid_d = 1'b1;
+        end else if (have_ready) begin
+            next_warp_d = picked_warp;
+            next_valid_d = 1'b1;
+        end else if (decode_stall) begin
+            next_warp_d = curr_warp;
+            next_valid_d = 1'b1;
+        end else begin
+            next_warp_d = curr_warp;
+            next_valid_d = 1'b0;
+        end
+    end
+
+    logic is_cycle0;
+    assign is_cycle0 = (sub_warp_cycle == 2'd0);
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            curr_warp <= '0;
+            next_warp <= '0;
+            issue_valid <= 1'b0;
+        end else if (is_cycle0) begin
+            curr_warp <= next_warp;      // adopt last span's staged pick
+            next_warp <= next_warp_d;    // stage the following span's pick
+            issue_valid <= next_valid_d;
+        end
+    end
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            ready <= '0;
+            finished <= '0;
+        end else if (kernel_start) begin
+            for (int i = 0; i < NUM_WARPS; i++) begin
+                ready[i]    <= (i < num_warps);
+                finished[i] <= (i >= num_warps);
+            end
+        end else begin
+            for (int i = 0; i < NUM_WARPS; i++) begin
+                logic set_ready, clear_ready;
+                set_ready = (commit_done && commit_warp_id == i[2:0])
+                           || push2_done[i]
+                           || (decode_stall && curr_warp == i[2:0]);
+                clear_ready = is_cycle0 && next_valid_d && (next_warp_d == i[2:0]);
+
+                if (clear_ready) ready[i] <= 1'b0;
+                else if (set_ready) ready[i] <= 1'b1;
+            end
+            if (done_detect)
+                finished[curr_warp] <= 1'b1;
+        end
+    end
+
+    assign kernel_done = &finished;
+endmodule
