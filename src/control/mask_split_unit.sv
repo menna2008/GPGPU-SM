@@ -2,7 +2,7 @@ module mask_split_unit (
     input logic clk,
     input logic reset,
     input logic [1:0] sub_warp_cycle,
-    input logic accum_done,
+    input logic sub_warp_valid,
 
     // Information about the branch
     input logic is_branch,
@@ -21,6 +21,8 @@ module mask_split_unit (
     output logic [31:0] push2_recon_pc // branch_pc + push2_pc_recon_offset
 );
     logic [31:0] taken_bits_accum;
+    logic accum_done;
+    assign accum_done = (&sub_warp_cycle && sub_warp_valid);
 
     always_ff @(posedge clk) begin
         if (reset) begin
@@ -30,13 +32,13 @@ module mask_split_unit (
                 2'd0: taken_bits_accum[7:0] <= branch_taken_bits;
                 2'd1: taken_bits_accum[15:8] <= branch_taken_bits;
                 2'd2: taken_bits_accum[23:16] <= branch_taken_bits;
-                2'd3: taken_bits_accum[31:24] <= branch_taken_bits;
+                2'd3: taken_bits_accum[31:24] <= sub_warp_valid ? branch_taken_bits : taken_bits_accum[31:24];
             endcase
         end
     end
 
     always_comb begin
-        if (reset) begin
+        if (reset || ~accum_done) begin
             push2_valid = 1'b0;
             push2_mask_taken = 32'b0;
             push2_mask_not_taken = 32'b0;
@@ -51,6 +53,6 @@ module mask_split_unit (
             push2_recon_pc = branch_pc + {{26{push2_pc_recon_offset[5]}}, push2_pc_recon_offset};
         end
 
-        push2_valid = accum_done;
+        push2_valid = accum_done && is_branch && ~reset;
     end
 endmodule

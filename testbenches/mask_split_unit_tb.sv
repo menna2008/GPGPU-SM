@@ -3,7 +3,7 @@ module tb_mask_split_unit;
     logic clk;
     logic reset;
     logic [1:0] sub_warp_cycle;
-    logic accum_done;
+    logic sub_warp_valid;
     logic is_branch;
     logic [7:0] branch_taken_bits;
     logic [31:0] current_active_mask;
@@ -24,7 +24,7 @@ module tb_mask_split_unit;
         .clk(clk),
         .reset(reset),
         .sub_warp_cycle(sub_warp_cycle),
-        .accum_done(accum_done),
+        .sub_warp_valid(sub_warp_valid),
         .is_branch(is_branch),
         .branch_taken_bits(branch_taken_bits),
         .current_active_mask(current_active_mask),
@@ -63,7 +63,7 @@ module tb_mask_split_unit;
         clk = 0;
         reset = 1;
         sub_warp_cycle = 2'd0;
-        accum_done = 1'b0;
+        sub_warp_valid = 1'b0;
         is_branch = 1'b0;
         branch_taken_bits = 8'b0;
         current_active_mask = 32'b0;
@@ -79,25 +79,23 @@ module tb_mask_split_unit;
         pc_taken = 32'h0000_2000;
         push2_pc_recon_offset = 6'd4;
         current_active_mask = 32'hFFFF_FFFF;
+        branch_taken_bits = 8'h01; // byte0 = 0x01
 
-        sub_warp_cycle = 2'd0; branch_taken_bits = 8'h01; accum_done = 1'b0; // byte0 = 0x01
-
-        @(negedge clk);
-        sub_warp_cycle = 2'd1; branch_taken_bits = 8'h02; accum_done = 1'b0; // byte1 = 0x02
+        sub_warp_cycle = 2'd0; sub_warp_valid = 1'b1;
 
         @(negedge clk);
-        sub_warp_cycle = 2'd2; branch_taken_bits = 8'h03; accum_done = 1'b0; // byte2 = 0x03
+        sub_warp_cycle = 2'd1; branch_taken_bits = 8'h02; // byte1 = 0x02
+
+        @(negedge clk);
+        sub_warp_cycle = 2'd2; branch_taken_bits = 8'h03; // byte2 = 0x03
 
         @(negedge clk);
         // Now sub_warp_cycle==3 is active (registered from the posedge we just crossed).
-        // Assert accum_done COMBINATIONALLY in this same cycle, alongside byte3's
-        // live value on branch_taken_bits, and sample push2_mask_taken WITHOUT
-        // waiting for another clock edge -- this is the crux of the test.
-        sub_warp_cycle = 2'd3; branch_taken_bits = 8'h04; accum_done = 1'b1; // byte3 = 0x04
+        sub_warp_cycle = 2'd3; branch_taken_bits = 8'h04; // byte3 = 0x04
         @(posedge clk);
         #1; // let combinational logic settle after signal changes
 
-        $display("--- Sampling combinationally within sub_warp_cycle==3, accum_done==1 ---");
+        $display("Sampling at sub_warp_cycle == 3");
         $display("taken_bits expected = 32'h0403_0201 if byte3 landed in time, else 32'h00_030201 (byte3 missing)");
         check_bit(push2_valid, 1'b1);
         check(push2_mask_taken, 32'h0403_0201);
@@ -106,7 +104,6 @@ module tb_mask_split_unit;
         check(push2_recon_pc, 32'h0000_1004);
 
         @(negedge clk);
-        accum_done = 1'b0;
         is_branch = 1'b0;
         @(negedge clk);
         check_bit(push2_valid, 1'b0);
