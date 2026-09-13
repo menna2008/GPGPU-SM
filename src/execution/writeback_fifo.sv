@@ -17,6 +17,10 @@ module fifo #(
     input logic [9:0] alu_addr,
     input logic [31:0] alu_data,
 
+    input logic special_reg_push,
+    input logic [9:0] special_reg_addr,
+    input logic [31:0] special_reg_data,
+
     input logic pop,
 
     output logic [9:0] head_addr,
@@ -29,14 +33,14 @@ module fifo #(
     logic [COUNT_DEPTH-1:0] count_q;
     logic [2:0] push_count;
 
-    assign push_count = {1'b0, lsu_push} + {1'b0, fma_push} + {1'b0, alu_push};
+    assign push_count = {1'b0, lsu_push} + {1'b0, fma_push} + {1'b0, alu_push} + {1'b0, special_reg_push};
 
     integer i;
 
     assign head_addr = addr_q[0];
     assign head_data = data_q[0];
     assign empty = ~|count_q; // (count_q == 0)
-    assign full = (count_q >= DEPTH - 2);
+    assign full = (count_q >= DEPTH - 3);
 
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
@@ -48,7 +52,7 @@ module fifo #(
                     data_q[i] <= data_q[i+1];
                 end
             end
-            
+
             if (lsu_push) begin
                 addr_q[count_q - pop] <= lsu_addr;
                 data_q[count_q - pop] <= lsu_data;
@@ -62,6 +66,11 @@ module fifo #(
             if (alu_push) begin
                 addr_q [count_q  - pop + lsu_push + fma_push] <= alu_addr;
                 data_q [count_q  - pop + lsu_push + fma_push] <= alu_data;
+            end
+
+            if (special_reg_push) begin
+                addr_q [count_q  - pop + lsu_push + fma_push + alu_push] <= special_reg_addr;
+                data_q [count_q  - pop + lsu_push + fma_push + alu_push] <= special_reg_data;
             end
             
             // Update count
