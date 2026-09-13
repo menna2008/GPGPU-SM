@@ -1,5 +1,5 @@
 module fifo #(
-    parameter int DEPTH = 8,
+    parameter int DEPTH = 16,
     parameter int COUNT_DEPTH = $clog2(DEPTH+1)
 ) (
     input logic clk,
@@ -42,7 +42,7 @@ module fifo #(
     assign empty = ~|count_q; // (count_q == 0)
     assign full = (count_q >= DEPTH - 3);
 
-    always_ff @(posedge clk or posedge reset) begin
+    always_ff @(posedge clk) begin
         if (reset) begin
             count_q <= '0;
         end else begin
@@ -59,18 +59,18 @@ module fifo #(
             end
 
             if (fma_push) begin
-                addr_q [count_q - pop + lsu_push] <= fma_addr;
-                data_q [count_q  - pop + lsu_push] <= fma_data;
+                addr_q[count_q - pop + lsu_push] <= fma_addr;
+                data_q[count_q  - pop + lsu_push] <= fma_data;
             end
 
             if (alu_push) begin
-                addr_q [count_q  - pop + lsu_push + fma_push] <= alu_addr;
-                data_q [count_q  - pop + lsu_push + fma_push] <= alu_data;
+                addr_q[count_q  - pop + lsu_push + fma_push] <= alu_addr;
+                data_q[count_q  - pop + lsu_push + fma_push] <= alu_data;
             end
 
             if (special_reg_push) begin
-                addr_q [count_q  - pop + lsu_push + fma_push + alu_push] <= special_reg_addr;
-                data_q [count_q  - pop + lsu_push + fma_push + alu_push] <= special_reg_data;
+                addr_q[count_q  - pop + lsu_push + fma_push + alu_push] <= special_reg_addr;
+                data_q[count_q  - pop + lsu_push + fma_push + alu_push] <= special_reg_data;
             end
             
             // Update count
