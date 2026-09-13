@@ -1,8 +1,8 @@
 module writeback_arbiter_tb;
     reg clk, reset;
-    reg [31:0] alu_data, fma_data, lsu_data;
-    reg [9:0]  alu_addr, fma_addr, lsu_addr;
-    reg alu_valid, fma_valid, lsu_valid;
+    reg [31:0] alu_data, fma_data, lsu_data, special_reg_data;
+    reg [9:0]  alu_addr, fma_addr, lsu_addr, special_reg_addr;
+    reg alu_valid, fma_valid, lsu_valid, special_reg_valid;
 
     wire [9:0]  rf_write_addr;
     wire [31:0] rf_write_data;
@@ -19,14 +19,17 @@ module writeback_arbiter_tb;
         .alu_data(alu_data),
         .fma_data(fma_data),
         .lsu_data(lsu_data),
+        .special_reg_data(special_reg_data),
 
         .alu_addr(alu_addr),
         .fma_addr(fma_addr),
         .lsu_addr(lsu_addr),
+        .special_reg_addr(special_reg_addr),
         
         .alu_valid(alu_valid),
         .fma_valid(fma_valid),
         .lsu_valid(lsu_valid),
+        .special_reg_valid(special_reg_valid),
 
         .rf_write_addr(rf_write_addr),
         .rf_write_data(rf_write_data),
@@ -40,12 +43,14 @@ module writeback_arbiter_tb;
     task automatic drive(
         input a_v, input [9:0] a_a, input [31:0] a_d,
         input f_v, input [9:0] f_a, input [31:0] f_d,
-        input l_v, input [9:0] l_a, input [31:0] l_d
+        input l_v, input [9:0] l_a, input [31:0] l_d,
+        input s_v, input [9:0] s_a, input [31:0] s_d
     );
         begin
             alu_valid = a_v; alu_addr = a_a; alu_data = a_d;
             fma_valid = f_v; fma_addr = f_a; fma_data = f_d;
             lsu_valid = l_v; lsu_addr = l_a; lsu_data = l_d;
+            special_reg_valid = s_v; special_reg_addr = s_a; special_reg_data = s_d;
             #1; // let result settle
         end
     endtask
@@ -79,7 +84,7 @@ module writeback_arbiter_tb;
         clk = 0;
         reset = 1;
 
-        drive(0,0,0, 0,0,0, 0,0,0);
+        drive(0,0,0, 0,0,0, 0,0,0, 0,0,0);
 
         tick();
         reset = 0;
@@ -87,7 +92,7 @@ module writeback_arbiter_tb;
 
         // 1. Nothing valid
         $display("\nTEST 1: Nothing valid");
-        drive(0,0,0, 0,0,0, 0,0,0);
+        drive(0,0,0, 0,0,0, 0,0,0, 0,0,0);
         check(0,0,0);
         tick();
 
@@ -95,6 +100,7 @@ module writeback_arbiter_tb;
         // 2. Only ALU
         $display("\nTEST 2: Only ALU");
         drive(1,10'h001,32'hAAAA,
+              0,0,0,
               0,0,0,
               0,0,0);
         check(1,10'h001,32'hAAAA);
@@ -105,6 +111,7 @@ module writeback_arbiter_tb;
         $display("\nTEST 3: Only FMA");
         drive(0,0,0,
               1,10'h002,32'hBBBB,
+              0,0,0,
               0,0,0);
         check(1,10'h002,32'hBBBB);
         tick();
@@ -114,7 +121,8 @@ module writeback_arbiter_tb;
         $display("\nTEST 4: Only LSU");
         drive(0,0,0,
               0,0,0,
-              1,10'h003,32'hCCCC);
+              1,10'h003,32'hCCCC,
+              0,0,0);
         check(1,10'h003,32'hCCCC);
         tick();
 
@@ -124,14 +132,15 @@ module writeback_arbiter_tb;
         $display("\nTEST 5: LSU + ALU");
         drive(1,10'h010,32'hAAAA0010,
               0,0,0,
-              1,10'h020,32'hBBBB0020);
+              1,10'h020,32'hBBBB0020,
+              0,0,0);
         check(1,10'h020,32'hBBBB0020);
         tick();
 
 
         // ALU should now come from FIFO
         $display("TEST 5.2: Buffered ALU");
-        drive(0,0,0, 0,0,0, 0,0,0);
+        drive(0,0,0, 0,0,0, 0,0,0, 0,0,0);
         check(1,10'h010,32'hAAAA0010);
         tick();
 
@@ -141,14 +150,15 @@ module writeback_arbiter_tb;
         $display("\nTEST 6: LSU + FMA + ALU");
         drive(1,10'h030,32'hAAAA0030,
               1,10'h040,32'hBBBB0040,
-              1,10'h050,32'hCCCC0050);
+              1,10'h050,32'hCCCC0050,
+              0,0,0);
 
 
         // LSU should be first
         check(1,10'h050,32'hCCCC0050);
         tick();
 
-        drive(0,0,0, 0,0,0, 0,0,0);
+        drive(0,0,0, 0,0,0, 0,0,0, 0,0,0);
 
         // FMA should be next
         check(1,10'h040,32'hBBBB0040);
@@ -164,7 +174,8 @@ module writeback_arbiter_tb;
 
         drive(1,10'h060,32'hAAAA0060,
               1,10'h070,32'hBBBB0070,
-              1,10'h080,32'hCCCC0080);
+              1,10'h080,32'hCCCC0080,
+              0,0,0);
 
         check(1,10'h080,32'hCCCC0080);
         tick();
@@ -173,20 +184,21 @@ module writeback_arbiter_tb;
         // New LSU arrives, but FIFO wins.
         drive(0,0,0,
               0,0,0,
-              1,10'h090,32'hDDDD0090);
+              1,10'h090,32'hDDDD0090,
+              0,0,0);
 
         check(1,10'h070,32'hBBBB0070);
         tick();
 
 
         // ALU was already in FIFO
-        drive(0,0,0, 0,0,0, 0,0,0);
+        drive(0,0,0, 0,0,0, 0,0,0, 0,0,0);
         check(1,10'h060,32'hAAAA0060);
         tick();
 
 
         // New LSU should be last
-        drive(0,0,0, 0,0,0, 0,0,0);
+        drive(0,0,0, 0,0,0, 0,0,0, 0,0,0);
         check(1,10'h090,32'hDDDD0090);
         tick();
 
