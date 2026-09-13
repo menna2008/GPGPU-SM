@@ -1,13 +1,21 @@
-module result_fifo #(
-    parameter int DEPTH = 2,
+module fifo #(
+    parameter int DEPTH = 8,
     parameter int COUNT_DEPTH = $clog2(DEPTH+1)
 ) (
     input logic clk,
     input logic reset,
 
-    input logic push,
-    input logic [9:0] push_addr,
-    input logic [31:0] push_data,
+    input logic lsu_push,
+    input logic [9:0] lsu_addr,
+    input logic [31:0] lsu_data,
+
+    input logic fma_push,
+    input logic [9:0] fma_addr,
+    input logic [31:0] fma_data,
+
+    input logic alu_push,
+    input logic [9:0] alu_addr,
+    input logic [31:0] alu_data,
 
     input logic pop,
 
@@ -19,41 +27,45 @@ module result_fifo #(
     logic [9:0] addr_q [0:DEPTH-1];
     logic [31:0] data_q [0:DEPTH-1];
     logic [COUNT_DEPTH-1:0] count_q;
+    logic [2:0] push_count;
+
+    assign push_count = {1'b0, lsu_push} + {1'b0, fma_push} + {1'b0, alu_push};
 
     integer i;
 
     assign head_addr = addr_q[0];
     assign head_data = data_q[0];
     assign empty = ~|count_q; // (count_q == 0)
-    assign full = (count_q == DEPTH);
+    assign full = (count_q >= DEPTH - 2);
 
     always_ff @(posedge clk or posedge reset) begin
         if (reset) begin
             count_q <= '0;
         end else begin
-            if (pop && !push) begin
-                // pop only, so shift only and decrement counter
+            if (pop) begin
                 for (i = 0; i < DEPTH-1; i = i + 1) begin
                     addr_q[i] <= addr_q[i+1];
                     data_q[i] <= data_q[i+1];
                 end
-                count_q <= count_q - 1'b1;
-            end else if (push && !pop) begin
-                // push only, so add new entry at tail and increment counter
-                addr_q[count_q] <= push_addr;
-                data_q[count_q] <= push_data;
-                count_q <= count_q + 1'b1;
-            end else if (push && pop) begin
-                // push and pop, so shift down by one add new entry at tail
-                for (i = 0; i < DEPTH-1; i = i + 1) begin
-                    addr_q[i] <= addr_q[i+1];
-                    data_q[i] <= data_q[i+1];
-                end
-                addr_q[count_q-1] <= push_addr;
-                data_q[count_q-1] <= push_data;
-                // count_q unchanged
             end
-            // no push and no pop means leave FIFO and count unchanged
+            
+            if (lsu_push) begin
+                addr_q[count_q - pop] <= lsu_addr;
+                data_q[count_q - pop] <= lsu_data;
+            end
+
+            if (fma_push) begin
+                addr_q [count_q - pop + lsu_push] <= fma_addr;
+                data_q [count_q  - pop + lsu_push] <= fma_data;
+            end
+
+            if (alu_push) begin
+                addr_q [count_q  - pop + lsu_push + fma_push] <= alu_addr;
+                data_q [count_q  - pop + lsu_push + fma_push] <= alu_data;
+            end
+            
+            // Update count
+            count_q <= count_q + push_count - pop;
         end
     end
 endmodule

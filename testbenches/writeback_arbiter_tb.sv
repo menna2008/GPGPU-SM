@@ -7,12 +7,12 @@ module writeback_arbiter_tb;
     wire [9:0]  rf_write_addr;
     wire [31:0] rf_write_data;
     wire rf_write_enable;
-    wire alu_full, fma_full, lsu_full;
+    wire buffer_full;
 
     integer errors = 0;
     integer tests = 0;
 
-    writeback_arbiter dut (
+    writeback_arbiter DUT (
         .clk(clk),
         .reset(reset),
 
@@ -32,9 +32,7 @@ module writeback_arbiter_tb;
         .rf_write_data(rf_write_data),
         .rf_write_enable(rf_write_enable),
         
-        .alu_full(alu_full),
-        .fma_full(fma_full),
-        .lsu_full(lsu_full)
+        .buffer_full(buffer_full)
     );
 
     always #5 clk = ~clk;
@@ -48,7 +46,7 @@ module writeback_arbiter_tb;
             alu_valid = a_v; alu_addr = a_a; alu_data = a_d;
             fma_valid = f_v; fma_addr = f_a; fma_data = f_d;
             lsu_valid = l_v; lsu_addr = l_a; lsu_data = l_d;
-            #1; // let combinational grant/mux settle
+            #1; // let result settle
         end
     endtask
 
@@ -61,8 +59,8 @@ module writeback_arbiter_tb;
                 (exp_en && (rf_write_addr !== exp_addr || rf_write_data !== exp_data))) begin
                 errors = errors + 1;
                 $display("FAIL | expected: en = %b addr = %h data = %h) | got: en = %b addr = %h data = %h\n",
-                        rf_write_enable, rf_write_addr, rf_write_data,
-                        exp_en, exp_addr, exp_data);
+                        exp_en, exp_addr, exp_data,
+                        rf_write_enable, rf_write_addr, rf_write_data);
             end else begin
                 $display("PASS | en = %b addr = %h data = %h\n",
                         rf_write_enable, rf_write_addr, rf_write_data);
@@ -80,64 +78,125 @@ module writeback_arbiter_tb;
     initial begin
         clk = 0;
         reset = 1;
-        alu_valid = 0; alu_addr = 0; alu_data = 0;
-        fma_valid = 0; fma_addr = 0; fma_data = 0;
-        lsu_valid = 0; lsu_addr = 0; lsu_data = 0;
-        tick(); tick();
+
+        drive(0,0,0, 0,0,0, 0,0,0);
+
+        tick();
         reset = 0;
 
-        // Case 1: single ALU result
-        $display("Single ALU result");
-        drive(1, 10'h001, 32'hAAAA0001,  0,0,0,  0,0,0);
-        check(1, 10'h001, 32'hAAAA0001);
-        tick();
 
-        $display("Idle after single ALU");
+        // 1. Nothing valid
+        $display("\nTEST 1: Nothing valid");
         drive(0,0,0, 0,0,0, 0,0,0);
-        check(0, 0, 0);
+        check(0,0,0);
         tick();
 
-        // Case 2: LSU and ALU both valid same cycle
-        // (LSU should win, ALU should be placed in its buffer)
-        $display("LSU and ALU high at the same time, LSU wins over ALU");
-        drive(1, 10'h002, 32'h11110002,  0,0,0,  1, 10'h003, 32'h22220003);
-        check(1, 10'h003, 32'h22220003);
+
+        // 2. Only ALU
+        $display("\nTEST 2: Only ALU");
+        drive(1,10'h001,32'hAAAA,
+              0,0,0,
+              0,0,0);
+        check(1,10'h001,32'hAAAA);
         tick();
 
-        // Next cycle: nothing new valid
-        // ALU's buffered entry should now win
-        $display("Buffered ALU drains");
+
+        // 3. Only FMA
+        $display("\nTEST 3: Only FMA");
+        drive(0,0,0,
+              1,10'h002,32'hBBBB,
+              0,0,0);
+        check(1,10'h002,32'hBBBB);
+        tick();
+
+
+        // 4. Only LSU
+        $display("\nTEST 4: Only LSU");
+        drive(0,0,0,
+              0,0,0,
+              1,10'h003,32'hCCCC);
+        check(1,10'h003,32'hCCCC);
+        tick();
+
+
+        // 5. LSU + ALU
+        // LSU wins, ALU goes into FIFO
+        $display("\nTEST 5: LSU + ALU");
+        drive(1,10'h010,32'hAAAA0010,
+              0,0,0,
+              1,10'h020,32'hBBBB0020);
+        check(1,10'h020,32'hBBBB0020);
+        tick();
+
+
+        // ALU should now come from FIFO
+        $display("TEST 5.2: Buffered ALU");
         drive(0,0,0, 0,0,0, 0,0,0);
-        check(1, 10'h002, 32'h11110002);
+        check(1,10'h010,32'hAAAA0010);
         tick();
 
-        $display("Idle after draining ALU result");
+
+        // 6. All three valid
+        // LSU wins, FMA then ALU are buffered
+        $display("\nTEST 6: LSU + FMA + ALU");
+        drive(1,10'h030,32'hAAAA0030,
+              1,10'h040,32'hBBBB0040,
+              1,10'h050,32'hCCCC0050);
+
+
+        // LSU should be first
+        check(1,10'h050,32'hCCCC0050);
+        tick();
+
         drive(0,0,0, 0,0,0, 0,0,0);
-        check(0, 0, 0);
+
+        // FMA should be next
+        check(1,10'h040,32'hBBBB0040);
         tick();
 
-        // Case 3: all three valid same cycle
-        // (LSU wins, FMA and ALU should both be placed in their respective buffers)
-        $display("All three sources are valid, LSU wins");
-        drive(1, 10'h004, 32'h000000A4, 1, 10'h005, 32'h000000F5, 1, 10'h006, 32'h00000006);
-        check(1, 10'h006, 32'h00000006);
+        // ALU should be next
+        check(1,10'h030,32'hAAAA0030);
         tick();
 
-        // FMA should drain next (higher priority than ALU among buffered)
-        $display("Buffered FMA drains before ALU");
+        // 7. Buffered data has priority over new LSU
+        // First create FMA + ALU in FIFO
+        $display("\nTEST 7: Buffered data vs new LSU");
+
+        drive(1,10'h060,32'hAAAA0060,
+              1,10'h070,32'hBBBB0070,
+              1,10'h080,32'hCCCC0080);
+
+        check(1,10'h080,32'hCCCC0080);
+        tick();
+
+        // FIFO contains FMA + ALU.
+        // New LSU arrives, but FIFO wins.
+        drive(0,0,0,
+              0,0,0,
+              1,10'h090,32'hDDDD0090);
+
+        check(1,10'h070,32'hBBBB0070);
+        tick();
+
+
+        // ALU was already in FIFO
         drive(0,0,0, 0,0,0, 0,0,0);
-        check(1, 10'h005, 32'h000000F5);
+        check(1,10'h060,32'hAAAA0060);
         tick();
 
-        $display("Buffered ALU drains last");
+
+        // New LSU should be last
         drive(0,0,0, 0,0,0, 0,0,0);
-        check(1, 10'h004, 32'h000000A4);
+        check(1,10'h090,32'hDDDD0090);
         tick();
 
-        $display("---------------------------------------------");
-        $display("Tests: %0d  Errors: %0d", tests, errors);
-        if (errors == 0) $display("ALL TESTS PASSED");
-        else $display("SOME TESTS FAILED");
+
+        // Done
+        if (errors == 0)
+            $display("\nALL TESTS PASSED");
+        else
+            $display("\nERRORS: %0d", errors);
+
         $finish;
     end
 endmodule
