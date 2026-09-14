@@ -8,19 +8,32 @@ module tb_warp_scheduler;
     logic commit_done;
     logic [2:0] commit_warp_id;
     logic [NUM_WARPS-1:0] push2_done;
-    logic decode_stall;
     logic coalescing_busy;
     logic [1:0] sub_warp_cycle;
     logic sub_warp_valid;
     logic done_detect;
+
+    logic fetch_valid;
+    logic buffer_full;
 
     logic [2:0] curr_warp;
     logic [2:0] next_warp;
     logic issue_valid;
     logic kernel_done;
 
+    logic [2:0] saved_curr_warp;
+
     int pass_count = 0;
     int fail_count = 0;
+
+    sub_warp_counter sub_counter (
+        .clk(clk),
+        .reset(reset),
+        .fetch_valid(fetch_valid),
+        .buffer_full(buffer_full),
+        .sub_warp_cycle(sub_warp_cycle),
+        .sub_warp_valid(sub_warp_valid)
+    );
 
     warp_scheduler #(.NUM_WARPS(NUM_WARPS)) dut (
         .clk(clk),
@@ -30,9 +43,9 @@ module tb_warp_scheduler;
         .commit_done(commit_done),
         .commit_warp_id(commit_warp_id),
         .push2_done(push2_done),
-        .decode_stall(decode_stall),
         .coalescing_busy(coalescing_busy),
         .sub_warp_cycle(sub_warp_cycle),
+        .sub_warp_valid(sub_warp_valid),
         .done_detect(done_detect),
         .curr_warp(curr_warp),
         .next_warp(next_warp),
@@ -41,12 +54,6 @@ module tb_warp_scheduler;
     );
 
     always #5 clk = ~clk;
-
-    // stand-in for sub_warp_counter: free-running 0-3, always valid
-    always_ff @(posedge clk)
-        if (reset) sub_warp_cycle <= 2'd0;
-        else sub_warp_cycle <= sub_warp_cycle + 2'd1;
-    assign sub_warp_valid = 1'b1;
 
     // tick to go past the posedge of the clock and give the registers #1 to settle
     task automatic tick();
@@ -61,8 +68,9 @@ module tb_warp_scheduler;
         commit_done = 1'b0;
         commit_warp_id = 3'd0;
         push2_done = '0;
-        decode_stall = 1'b0;
         coalescing_busy = 1'b0;
+        fetch_valid = 1'b1;
+        buffer_full = 1'b0;
         done_detect = 1'b0;
         tick();
         tick();
@@ -76,17 +84,20 @@ module tb_warp_scheduler;
         kernel_start = 1'b0;
     endtask
 
+
     task automatic step(input int n);
         repeat (n) tick();
     endtask
 
+
     // set sub_warp_cycle == 0 where the next warp is selected
     task automatic to_cycle0();
-        while (sub_warp_cycle != 2'd0) tick();
+        while (sub_warp_cycle != 2'd0)
+            tick();
     endtask
 
-    // land one tick past that decision, so curr_warp/next_warp/issue_valid
-    // reflect its outcome.
+
+    // land one tick past that decision, to update curr_warp/next_warp/issue_valid
     task automatic to_decision();
         to_cycle0();
         tick();
@@ -105,13 +116,11 @@ module tb_warp_scheduler;
         push2_done[wid] = 1'b0;
     endtask
 
-    task automatic pulse_decode_stall();
-        decode_stall = 1'b1;
-        tick();
-        decode_stall = 1'b0;
-    endtask
 
-    task automatic check_eq(input logic [31:0] actual, input logic [31:0] expected);
+    task automatic check_eq(
+        input logic [31:0] actual,
+        input logic [31:0] expected
+    );
         if (actual === expected) begin
             $display("PASS | got = %0d", actual);
             pass_count++;
@@ -121,12 +130,11 @@ module tb_warp_scheduler;
         end
     endtask
 
+
     initial begin
         clk = 0;
-
-        // reset clears state
         do_reset();
-        $display("Check curr_warp, next_warp, and issue_valid after reset");
+        $display("\nCheck curr_warp, next_warp, and issue_valid after reset");
         check_eq(curr_warp, 3'd0);
         check_eq(next_warp, 3'd0);
         check_eq(issue_valid, 1'b0);
@@ -141,25 +149,26 @@ module tb_warp_scheduler;
         for (int i = 0; i < 40; i++) begin
             tick();
             if (next_warp > 3) begin
-                $display("FAIL | next_warp = %0d outside active range (num_warps = 4)", next_warp);
+                $display("\nFAIL | next_warp = %0d outside active range (num_warps = 4)",
+                         next_warp);
                 fail_count++;
             end
         end
-        $display("PASS | next_warp stayed in 0-3 over 40 cycles");
+        $display("\nPASS | next_warp stayed in 0-3 over 40 cycles");
         pass_count++;
 
         // with nothing ever committing, all 4 warps are not ready
         to_cycle0();
         step(16); // 4 x 4 cycles, one warp is issued every 4 cycles
         to_decision();
-        $display("issue_valid low once all 4 warps issued and none committed");
+        $display("\nissue_valid low once all 4 warps issued and none committed");
         check_eq(issue_valid, 1'b0);
 
         // commit_done for warp 0 fires while sub_warp_cycle == 0
         // freed warp 0 should now be picked
         to_cycle0();
         pulse_commit(3'd0);
-        $display("commit_done visible same cycle it fires at cycle 0");
+        $display("\ncommit_done visible same cycle it fires at cycle 0");
         check_eq(next_warp, 3'd0);
         check_eq(issue_valid, 1'b1);
 
@@ -168,7 +177,7 @@ module tb_warp_scheduler;
         // freed warp 2 should now be picked
         to_cycle0();
         pulse_push2(3'd2);
-        $display("push2_done[2] visible same cycle it fires");
+        $display("\npush2_done[2] visible same cycle it fires");
         check_eq(next_warp, 3'd2);
         check_eq(issue_valid, 1'b1);
 
@@ -181,39 +190,47 @@ module tb_warp_scheduler;
         for (int i = 0; i < 8; i++) begin
             to_cycle0();
             pulse_commit(3'd1);
-            $display("next_warp should be 1 now that its previous instrucion was committed");
+            $display("\nnext_warp should be 1 now that its previous instruction was committed");
             check_eq(next_warp, 3'd1);
         end
         to_decision();
-        $display("curr_warp gets set to warp 1 a span after next_warp");
+        $display("\ncurr_warp gets set to warp 1 a span after next_warp");
         check_eq(curr_warp, 3'd1);
 
-        // decode_stall: diverts to the other ready warp immediately, and
-        // replays the stalled warp without needing commit_done
+        // Test buffer_full stalling sub_warp_counter
         do_reset();
         launch(3);
         to_cycle0();
-        step(4); // warp 0 claimed as next_warp
-        decode_stall = 1'b1;
-        to_cycle0(); // to next decision edge
-        pulse_decode_stall(); // asserted while sub_warp_cycle==0
-        $display("warp 0 stalled by the decode stage, so next warp is warp 2");
+        step(1); // move from cycle 0 to cycle 1
+        saved_curr_warp = curr_warp;
+
+        $display("\nbuffer_full stalls sub-warp counter");
+        $display("sub_warp_cycle should be 1 before stall");
+        check_eq(sub_warp_cycle, 2'd1);
+        buffer_full = 1'b1;
         tick();
-        check_eq(next_warp, 3'd1);
-        decode_stall = 1'b0;
 
-        // decode_stall with nothing else ready retries curr_warp
-        do_reset();
-        launch(1);
-        to_cycle0();
-        step(4); // warp0 claimed
-        to_cycle0();
-        $display("decode_stall with no alternative retries curr_warp");
-        check_eq(next_warp, 3'd0);
-        check_eq(issue_valid, 1'b1);
+        $display("\nsub_warp_counter should freeze at cycle 1");
+        check_eq(sub_warp_cycle, 2'd1);
+        $display("sub_warp_valid should be 0 while buffer is full");
+        check_eq(sub_warp_valid, 1'b0);
+        tick();
 
-        // curr_warp/next_warp staging: a decision shows up in next_warp
-        // immediately, curr_warp only catches up one span later
+        $display("\nsub_warp_counter should remain frozen");
+        check_eq(sub_warp_cycle, 2'd1);
+
+        $display("\nscheduler should not make a new decision while stalled");
+        check_eq(curr_warp, saved_curr_warp);
+
+        buffer_full = 1'b0;
+        tick();
+
+        $display("\nsub_warp_counter should resume after buffer is no longer full");
+        check_eq(sub_warp_cycle, 2'd2);
+        $display("sub_warp_valid should be valid again");
+        check_eq(sub_warp_valid, 1'b1);
+
+        // curr_warp catches up to warp_scheduler a span later
         do_reset();
         launch(2);
         to_cycle0();
@@ -243,7 +260,9 @@ module tb_warp_scheduler;
         $display("kernel_done set once sole warp finishes");
         check_eq(kernel_done, 1'b1);
 
-        $display("\n=== %0d passed, %0d failed ===", pass_count, fail_count);
+        $display("\n=== %0d passed, %0d failed ===",
+                 pass_count, fail_count);
+
         $finish;
     end
 
