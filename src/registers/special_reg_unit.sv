@@ -14,10 +14,14 @@ module special_reg_unit # (
     // Output warp_id, thread_slot, and dest_register for writeback_arbiter
     // This is simply the input passed to the output
     output logic [9:0] reg_bank_addr_out
+
+    input logic valid_in,
+    output logic valid_out
 );
     assign block_id = warp_id_in[2]; // 1 if warp_id >= 4, 0 otherwise
     assign warp_id_out = warp_id_in;
     assign thread_id = ({3'b0, sub_warp_cycle} << 3) + LANE_NUM;
 
     assign reg_bank_addr_out = reg_bank_addr_in;
+    assign valid_out = valid_in;
 endmodule
