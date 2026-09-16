@@ -1,0 +1,69 @@
+module fetch_stage (
+    input logic clk,
+    input logic reset,
+    input logic [2:0] next_warp,
+    input logic [31:0] top_pc,
+    input logic [31:0] recon_pc,
+
+    input logic consume, // calculated externally by
+                         // (sub_warp_cycle == 2'd0) && sub_warp_valid
+    
+    input logic icache_ready,
+    input logic [127:0] icache_data,
+    
+    output logic icache_req_valid,
+    output logic [31:0] icache_addr,
+
+    output logic fetch_valid,
+    output logic [31:0] instr,
+    output logic [31:0] instr_pc
+);
+    logic [127:0] fill_pcs;
+    logic fill_valid, req_outstanding;
+    logic request_active;
+
+    assign request_active = icache_req_valid || req_outstanding;
+
+    always_ff @(posedge clk) begin
+        if (reset) req_outstanding <= 1'b0;
+        else req_outstanding <= request_active && !icache_ready;
+    end
+
+    always_comb begin
+        if (reset) begin
+            icache_req_valid = 0;
+            icache_addr = 32'h0000_0000;
+        end else begin
+            icache_req_valid = !fetch_valid && !req_outstanding;
+            icache_addr = top_pc;
+        end
+    end
+    
+    always_comb begin
+        if (reset) begin
+            fill_valid = 1'b0;
+            fill_pcs = 128'b0;
+        end else begin
+            fill_valid = icache_ready & request_active;
+            for (int i = 0; i < 4; ++i)  begin
+                // top_pc + 4 * i (top_pc, top_pc + 4, top_pc + 8, top_pc + 12)
+                fill_pcs[i*32 +: 32] = top_pc + (i << 2);
+            end
+        end
+    end
+    
+    prefetch_buffer buffer (
+        .clk(clk),
+        .reset(reset),
+        .next_warp(next_warp),
+        .fill_valid(fill_valid),
+        .fill_data(icache_data),
+        .fill_pcs(fill_pcs),
+        .fill_recon_pc(recon_pc),
+        .consume(consume),
+
+        .instr(instr),
+        .instr_pc(instr_pc),
+        .fetch_valid(fetch_valid)
+    );
+endmodule
