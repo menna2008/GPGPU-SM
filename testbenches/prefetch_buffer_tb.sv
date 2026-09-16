@@ -207,6 +207,21 @@ module prefetch_buffer_tb;
         #1;
         check(I_A, 32'h8000, 1'b1);
 
+        // 10: line-boundary truncation
+        $display("Words crossing the 128B line boundary are invalid");
+        drive(3'd1,
+            1'b1, 1'b0,
+            {I_D, I_C, I_B, I_A},
+            {32'h9084, 32'h9080, 32'h907C, 32'h9078}, // word0 offset 0x78 -> word index 30; words 2,3 spill into next line
+            32'hFFFF_FFFF);
+        tick(); fill_valid = 1'b0;
+        check(I_A, 32'h9078, 1'b1); // word 0: offset 0x78, index 30 — within line
+        consume = 1'b1; tick();
+        check(I_B, 32'h907C, 1'b1); // word 1: offset 0x7C, index 31 — still the last valid word in this line
+        tick();
+        consume = 1'b0;
+        check_valid(1'b0);          // words 2,3 (0x9080, 0x9084) are in the NEXT line, therefore invalid
+
         $display("tests=%0d errors=%0d", tests, errors);
         $finish;
     end
