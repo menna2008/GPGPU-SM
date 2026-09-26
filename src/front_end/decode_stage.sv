@@ -33,6 +33,24 @@ module decode_stage (
     logic alu_valid, fma_valid, special_reg_valid;
     logic [7:0] curr_active_mask;
 
+    // instruction_latch uses the LIVE sub_warp_cycle at cycle N (when consume fires)
+    // decode_stage doesn't run until N+1, at which point the live counter already advanced
+    // this register holds the previous cycle's sub_warp_counter so decode's dest_addr/mask 
+    // stay tagged with the same sub-group source register addresses in instruction_latch
+
+    logic [1:0] sub_warp_cycle_prev;
+    logic       sub_warp_valid_prev;
+
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            sub_warp_cycle_prev <= 2'b0;
+            sub_warp_valid_prev <= 1'b0;
+        end else begin
+            sub_warp_cycle_prev <= sub_warp_cycle;
+            sub_warp_valid_prev <= sub_warp_valid;
+        end
+    end
+
     always_comb begin
         format = instr[31:29];
         opcode = instr[31:26];
@@ -64,9 +82,9 @@ module decode_stage (
             default : dst = 5'b0;
         endcase
 
-        dest_addr = {curr_warp, sub_warp_cycle, dst};
+        dest_addr = {curr_warp, sub_warp_cycle_prev, dst};
         imm = instr[15:0];
-        curr_active_mask = active_mask[sub_warp_cycle*8 +: 8];
+        curr_active_mask = active_mask[sub_warp_cycle_prev*8 +: 8];
     end
 
     always_ff @(posedge clk) begin
@@ -81,8 +99,8 @@ module decode_stage (
             imm_q <= 16'b0;
             instr_pc_q <= 32'b0;
         end else begin
-            sub_warp_valid_q <= sub_warp_valid;
-            sub_warp_cycle_q <= sub_warp_cycle;
+            sub_warp_valid_q <= sub_warp_valid_prev;
+            sub_warp_cycle_q <= sub_warp_cycle_prev;
             opcode_q <= opcode;
             alu_valid_q <= curr_active_mask & {8{alu_valid}};
             fma_valid_q <= curr_active_mask & {8{fma_valid}};
