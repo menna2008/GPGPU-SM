@@ -1,6 +1,7 @@
 `default_nettype none
 module int_alu (
     input logic clk,
+    input logic reset,
     input logic valid_in,
     input logic sub_warp_valid_in,
     input logic [1:0] sub_warp_cycle_in,
@@ -23,6 +24,13 @@ module int_alu (
     output logic sub_warp_valid_out,
     output logic [1:0] sub_warp_cycle_out,
     output logic [9:0] reg_bank_addr_out,
+
+    // Branch information
+    output logic is_branch,
+    output logic is_load,
+    output logic is_store,
+    output logic [31:0] branch_pc_out,
+    output logic [5:0] push2_pc_recon_offset
 );
     // Define parameters for instruction types
     localparam R_TYPE = 3'b000, I_TYPE = 3'b001, FMA = 3'b010, BRANCH = 3'b011, DONE = 3'b111;
@@ -42,9 +50,8 @@ module int_alu (
     localparam [2:0] BEQ = 3'b000, BNE = 3'b001;
     localparam [2:0] BLT = 3'b010, BGE = 3'b011;
 
-    always_ff begin
+    always_ff @(posedge clk) begin
         if (reset) begin
-            valid_out <= 1'b0;
             branch_taken <= 1'b0;
             result <= 32'b0;
         end else begin
@@ -92,14 +99,18 @@ module int_alu (
             sub_warp_cycle_out <= 2'b0;
             sub_warp_valid_out <= 1'b0;
             is_branch <= 1'b0;
+            is_load <= 1'b0;
+            is_store <= 1'b0;
             valid_out <= 1'b0;
             branch_pc_out <= 32'b0;
-            push2_pc_recon_offset <= 5'b0;
+            push2_pc_recon_offset <= 6'b0;
             reg_bank_addr_out <= 10'b0;
         end else begin
             sub_warp_cycle_out <= sub_warp_cycle_in;
             sub_warp_valid_out <= sub_warp_valid_in;
             is_branch <= (opcode[5:3] == BRANCH);
+            is_load <= (opcode == {I_TYPE, LOAD});
+            is_store <= (opcode == {I_TYPE, STORE});
             valid_out <= valid_in;
             branch_pc_out <= branch_pc_in;
             push2_pc_recon_offset <= offset[5:0];

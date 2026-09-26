@@ -20,6 +20,11 @@ module writeback_arbiter (
     input logic lsu_valid,
     input logic special_reg_valid,
 
+    //
+    input logic is_branch,
+    input logic is_load,
+    input logic is_store,
+
     // Output address, data, and write enable to register bank
     output logic [9:0] rf_write_addr,
     output logic [31:0] rf_write_data,
@@ -28,6 +33,9 @@ module writeback_arbiter (
     // Backpressure — stall issue of instructions of this result type
     output logic buffer_full
 );
+    logic alu_writeback_valid;
+    assign alu_writeback_valid = alu_valid && !is_branch && !is_load && !is_store;
+
     // signals to FIFOs
     logic buffer_empty;
     logic [9:0] buffer_head_addr;
@@ -43,10 +51,10 @@ module writeback_arbiter (
 
     assign grant_buffer = !buffer_empty;
 
-    assign grant_lsu_curr = buffer_empty && lsu_valid;
+    assign grant_lsu_curr = buffer_empty && lsu_valid && is_load;
     assign grant_fma_curr = buffer_empty && !lsu_valid && fma_valid;
-    assign grant_alu_curr = buffer_empty && !lsu_valid && !fma_valid && alu_valid;
-    assign grant_special_reg_curr = buffer_empty && !lsu_valid && !fma_valid && !alu_valid && special_reg_valid;
+    assign grant_alu_curr = buffer_empty && !lsu_valid && !fma_valid && alu_writeback_valid;
+    assign grant_special_reg_curr = buffer_empty && !lsu_valid && !fma_valid && !alu_writeback_valid && special_reg_valid;
 
     // Write is enabled if any of the data sources are granted access to the rf write port
 
@@ -76,7 +84,7 @@ module writeback_arbiter (
 
     assign lsu_push = lsu_valid && !grant_lsu_curr;
     assign fma_push = fma_valid && !grant_fma_curr;
-    assign alu_push = alu_valid && !grant_alu_curr;
+    assign alu_push = alu_writeback_valid && !grant_alu_curr;
     assign special_reg_push = special_reg_valid && !grant_special_reg_curr;
 
     assign buffer_pop = grant_buffer;
