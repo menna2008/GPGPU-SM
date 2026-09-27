@@ -1,4 +1,6 @@
-module mask_split_unit (
+module mask_split_unit #(
+    parameter int NUM_WARPS = 8
+) (
     input logic clk,
     input logic reset,
     input logic [1:0] sub_warp_cycle,
@@ -13,12 +15,19 @@ module mask_split_unit (
     input logic [5:0] push2_pc_recon_offset,
     input logic [31:0] pc_taken,
 
-    output logic push2_valid,
+    // used to identify which warp is currently executing
+    input logic [9:0] reg_bank_addr,
+
     output logic [31:0] push2_mask_taken,
     output logic [31:0] push2_mask_not_taken,
     output logic [31:0] push2_pc_taken,
     output logic [31:0] push2_pc_fallthrough, // branch_pc + 4
-    output logic [31:0] push2_recon_pc // branch_pc + push2_pc_recon_offset
+    output logic [31:0] push2_recon_pc, // branch_pc + push2_pc_recon_offset
+
+    // Per-warp valid bit, one-hot for currently executing warp
+    output logic [NUM_WARPS-1:0] recon_push2_valid,
+    output logic [NUM_WARPS-1:0] recon_current_pc_valid,
+    output logic 
 );
     logic accum_done;
     assign accum_done = (&sub_warp_cycle && sub_warp_valid);
@@ -35,31 +44,47 @@ module mask_split_unit (
                 end
                 2'd1: begin
                     push2_mask_taken[15:8] <= sub_warp_valid ? is_valid & branch_taken_bits : push2_mask_taken[15:8];
-                    push2_mask_taken[15:8] <= sub_warp_valid ? is_valid & ~branch_taken_bits : push2_mask_not_taken[15:8];
+                    push2_mask_not_taken[15:8] <= sub_warp_valid ? is_valid & ~branch_taken_bits : push2_mask_not_taken[15:8];
                 end
                 2'd2: begin
                     push2_mask_taken[23:16] <= sub_warp_valid ? is_valid & branch_taken_bits : push2_mask_taken[23:16];
-                    push2_mask_taken[23:16] <= sub_warp_valid ? is_valid & ~branch_taken_bits : push2_mask_not_taken[23:16];
+                    push2_mask_not_taken[23:16] <= sub_warp_valid ? is_valid & ~branch_taken_bits : push2_mask_not_taken[23:16];
                 end
                 2'd3: begin
                     push2_mask_taken[31:24] <= sub_warp_valid ? is_valid & branch_taken_bits : push2_mask_taken[31:24];
-                    push2_mask_taken[31:24] <= sub_warp_valid ? is_valid & ~branch_taken_bits : push2_mask_not_taken[31:24];
+                    push2_mask_not_taken[31:24] <= sub_warp_valid ? is_valid & ~branch_taken_bits : push2_mask_not_taken[31:24];
                 end
             endcase
         end
     end
 
-    always_comb begin
+    always_ff @(posedge clk) begin
         if (reset || ~accum_done) begin
-            push2_pc_taken = 32'b0;
-            push2_pc_fallthrough = 32'b0;
-            push2_recon_pc = 32'b0;
-        end else if (accum_done) begin
-            push2_pc_taken = pc_taken;
-            push2_pc_fallthrough = branch_pc + 32'd4;
-            push2_recon_pc = branch_pc + {{26{push2_pc_recon_offset[5]}}, push2_pc_recon_offset};
+            push2_pc_taken <= 32'b0;
+            push2_pc_fallthrough <= 32'b0;
+            push2_recon_pc <= 32'b0;
+        end else begin
+            push2_pc_taken <= pc_taken;
+            push2_pc_fallthrough <= branch_pc + 32'd4;
+            push2_recon_pc <= branch_pc + {{26{push2_pc_recon_offset[5]}}, push2_pc_recon_offset};
         end
+    end
 
-        push2_valid = accum_done && is_branch && ~reset;
+    // warp routing to appropriate recon_stack
+    logic [NUM_WARPS-1:0] exec_warp_id;
+    always_comb begin
+        exec_warp_id = '0;
+        exec_warp_id[reg_bank_addr[9:7]] = 1'b1;
+    end
+
+    logic push2_valid_i, seq_advance_valid;
+    always_ff @(posedge clk) begin
+        if (reset) begin
+            recon_push2_valid <= 1'b0;
+            recon_current_pc_valid <= 1'b0; 
+        end else begin
+            recon_push2_valid <= exec_warp_id & {NUM_WARPS{accum_done && is_branch && ~reset}};
+            recon_current_pc_valid <= exec_warp_id & {NUM_WARPS{accum_done && !is_branch && ~reset}}; 
+        end
     end
 endmodule

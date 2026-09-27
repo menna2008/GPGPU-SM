@@ -14,6 +14,7 @@ module decode_stage (
     output logic [1:0] sub_warp_cycle_q,
     
     output logic [5:0] opcode_q,
+    output logic done_detect,
 
     output logic [7:0] alu_valid_q,
     output logic [7:0] fma_valid_q,
@@ -54,6 +55,8 @@ module decode_stage (
     always_comb begin
         format = instr[31:29];
         opcode = instr[31:26];
+        done_detect = &opcode & ~|sub_warp_cycle_prev & sub_warp_valid_prev;
+                    // opcode == 111111 (DONE) and sub_warp_cycle == 0 and valid
         alu_valid = 1'b0;
         fma_valid = 1'b0;
         special_reg_valid = 1'b0;
@@ -102,9 +105,9 @@ module decode_stage (
             sub_warp_valid_q <= sub_warp_valid_prev;
             sub_warp_cycle_q <= sub_warp_cycle_prev;
             opcode_q <= opcode;
-            alu_valid_q <= curr_active_mask & {8{alu_valid}};
-            fma_valid_q <= curr_active_mask & {8{fma_valid}};
-            special_reg_valid_q <= curr_active_mask & {8{special_reg_valid}};
+            alu_valid_q <= curr_active_mask & {8{alu_valid & sub_warp_valid_prev}};
+            fma_valid_q <= curr_active_mask & {8{fma_valid & sub_warp_valid_prev}};
+            special_reg_valid_q <= curr_active_mask & {8{special_reg_valid & sub_warp_valid_prev}};
             dest_addr_q <= dest_addr;
             imm_q <= imm;
             instr_pc_q <= instr_pc;
