@@ -27,7 +27,6 @@ module mask_split_unit #(
     // Per-warp valid bit, one-hot for currently executing warp
     output logic [NUM_WARPS-1:0] recon_push2_valid,
     output logic [NUM_WARPS-1:0] recon_current_pc_valid,
-    output logic 
 );
     logic accum_done;
     assign accum_done = (&sub_warp_cycle && sub_warp_valid);
@@ -77,7 +76,6 @@ module mask_split_unit #(
         exec_warp_id[reg_bank_addr[9:7]] = 1'b1;
     end
 
-    logic push2_valid_i, seq_advance_valid;
     always_ff @(posedge clk) begin
         if (reset) begin
             recon_push2_valid <= 1'b0;
