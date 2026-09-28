@@ -1,6 +1,7 @@
 module fetch_stage (
     input logic clk,
     input logic reset,
+    input logic kernel_launch,
     input logic [2:0] next_warp,
     input logic [31:0] top_pc,
     input logic [31:0] recon_pc,
@@ -30,7 +31,7 @@ module fetch_stage (
     end
 
     always_comb begin
-        if (reset) begin
+        if (reset || kernel_launch) begin
             icache_req_valid = 0;
             icache_addr = 32'h0000_0000;
         end else begin
@@ -55,6 +56,7 @@ module fetch_stage (
     prefetch_buffer buffer (
         .clk(clk),
         .reset(reset),
+        .kernel_launch(kernel_launch),
         .next_warp(next_warp),
         .fill_valid(fill_valid),
         .fill_data(icache_data),

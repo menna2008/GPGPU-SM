@@ -6,6 +6,7 @@ module prefetch_buffer #(
 ) (
     input logic clk,
     input logic reset,
+    input logic kernel_launch,
 
     // fill data from fetch_stage when next_warp's buffer is empty
     input logic [2:0] next_warp,
@@ -31,7 +32,7 @@ module prefetch_buffer #(
     assign valid_bound = (fill_recon_pc < line_end_pc) ? fill_recon_pc : line_end_pc;
 
     always_ff @(posedge clk) begin
-        if (reset) begin
+        if (reset || kernel_launch) begin
             valid <= 'b0;
             for (int i = 0; i < NUM_WARPS*DEPTH_PER_WARP; ++i) begin
                 data[i] <= 'b0;
