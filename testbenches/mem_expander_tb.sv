@@ -50,7 +50,7 @@ module tb_mem_expander;
     int wstage_n = 0, wstage_pushed = 0;
 
     // MIG model
-    logic [127:0] mig_mem [0:2047];                 // indexed by app_addr[14:4]
+    logic [127:0] mig_mem [0:2047]; // indexed by app_addr[13:3]
     logic [127:0] pend_data [0:4095];
     int           pend_t    [0:4095];
     int           pend_head = 0, pend_tail = 0, last_t = 0;
@@ -125,7 +125,7 @@ module tb_mem_expander;
                         n_wr_cmds = n_wr_cmds + 1;
                         if (app_wdf_data !== exp_wd[cmd_done])
                             begin $display("[%0t] cmd #%0d: wrong write data %h expected %h", $time, cmd_done, app_wdf_data, exp_wd[cmd_done]); errors = errors + 1; end
-                        mig_mem[app_addr[14:4]] = app_wdf_data;
+                        mig_mem[app_addr[13:3]] = app_wdf_data;
                     end else begin
                         n_rd_cmds = n_rd_cmds + 1;
                         begin : sched
@@ -133,7 +133,7 @@ module tb_mem_expander;
                             t = cyc + lat_min + $urandom_range(lat_rng);
                             if (pend_tail != pend_head && t <= last_t) t = last_t + 1;
                             last_t = t;
-                            pend_data[pend_tail] = mig_mem[app_addr[14:4]];
+                            pend_data[pend_tail] = mig_mem[app_addr[13:3]];
                             pend_t[pend_tail]    = t;
                             pend_tail = pend_tail + 1;
                         end
@@ -164,7 +164,7 @@ module tb_mem_expander;
         begin
             for (b = 0; b < 8; b = b + 1) begin
                 exp_is_wr[exp_cmd_n] = wr;
-                exp_addr[exp_cmd_n]  = line*128 + 16*b;
+                exp_addr[exp_cmd_n]  = (line*128 + 16*b) / 2;
                 if (wr) begin
                     w = {$urandom, $urandom, $urandom, $urandom};
                     ref_mem[line*8 + b]  = w;

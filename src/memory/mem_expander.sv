@@ -54,7 +54,7 @@ module mem_expander (
 
     assign app_en = fire;
     assign app_cmd = {2'b0, !is_wr}; // Write command = 000, Read command = 001
-    assign app_addr = {line_addr[19:0], beat, 4'b0};
+    assign app_addr = {1'b0, line_addr[19:0], beat, 3'b0};
     assign app_wdf_data = wr_data;
     assign app_wdf_wren = fire & is_wr;
     assign app_wdf_end = fire & is_wr;
