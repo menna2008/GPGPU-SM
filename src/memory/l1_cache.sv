@@ -86,7 +86,7 @@ module l1_cache #(
     state_t state;
 
     // Storage
-    logic [20:0] tag_mem [4][16]; // Tag array: indexed by SET, all 4 ways read in parallel
+    logic [20:0] tag_mem [16][5]; // Tag array: indexed by SET, all 4 ways read in parallel
     (* ram_style = "distributed" *) logic [1023:0] data_mem [64]; // Data array: indexed by [set][way], single port
 
     // Per-line metadata
@@ -113,15 +113,15 @@ module l1_cache #(
     logic [5:0] d_idx;
     logic [1023:0] line_rd;
     assign d_idx = {d_set, d_way};
-    assign line_rd = data_mem[d_idx]; // async LUTRAM read, ~1 LUT level
+    assign line_rd = data_mem[d_idx];
 
-    logic [20:0] victim_tag;   // needed to rebuild the writeback address
-    logic [BW-1:0] beat;      // beat counter within a burst
-    logic [5:0] f_idx;        // flush walker over all 64 {set,way} entries
-    logic flushing;     // WB_DATA returns to FLUSH_SCAN instead of FILL_REQ
+    logic [20:0] victim_tag;
+    logic [BW-1:0] beat; // beat counter within a burst
+    logic [5:0] f_idx; // flush index to go through all 64 {set,way} cache slots
+    logic flushing; // WB_DATA returns to FLUSH_SCAN instead of FILL_REQ
 
-    wire  [3:0] f_set = f_idx[5:2];
-    wire  [1:0]    f_way = f_idx[1:0];
+    wire [3:0] f_set = f_idx[5:2];
+    wire [1:0] f_way = f_idx[1:0];
 
     // LOOKUP datapath
     logic [20:0] tag_rd [4];
@@ -132,7 +132,7 @@ module l1_cache #(
 
     always_comb begin
         for (int w = 0; w < 4; w++) begin
-            tag_rd[w] = tag_mem[w][r_set];
+            tag_rd[w] = tag_mem[r_set][w];
             hit_vec[w] = valid[r_set][w] && (tag_rd[w] == r_tag);
         end
         hit = |hit_vec;
@@ -142,7 +142,7 @@ module l1_cache #(
 
         vict_way = plru_victim(plru[r_set]);
         for (int w = 3; w >= 0; w--)
-            if (!valid[r_set][w]) vict_way = w[1:0];        // empty way (lowest wins)
+            if (!valid[r_set][w]) vict_way = w[1:0]; // empty way (lowest wins)
     end
 
     // Data array write port. Only accessed during RESP + store or FILL_DATA
@@ -174,7 +174,7 @@ module l1_cache #(
     // Tag array write: only when a fill completes.
     always_ff @(posedge clk) begin
         if (state == FILL_DATA && mem_rvalid && mem_rlast)
-            tag_mem[d_way][d_set] <= r_tag;
+            tag_mem[d_set][d_way] <= r_tag;
     end
 
     // Outputs
@@ -297,7 +297,7 @@ module l1_cache #(
                     if (valid[f_set][f_way] && dirty[f_set][f_way]) begin
                         d_set      <= f_set;
                         d_way      <= f_way;
-                        victim_tag <= tag_mem[f_way][f_set];
+                        victim_tag <= tag_mem[f_set][f_way];
                         state      <= WB_REQ;
                     end else if (f_idx == 6'd63) begin
                         state      <= FLUSH_DONE;
