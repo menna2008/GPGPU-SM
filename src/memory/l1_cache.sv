@@ -86,7 +86,7 @@ module l1_cache #(
     state_t state;
 
     // Storage
-    logic [20:0] tag_mem [16][5]; // Tag array: indexed by SET, all 4 ways read in parallel
+    logic [20:0] tag_mem [16][4]; // Tag array: indexed by SET, all 4 ways read in parallel
     (* ram_style = "distributed" *) logic [1023:0] data_mem [64]; // Data array: indexed by [set][way], single port
 
     // Per-line metadata

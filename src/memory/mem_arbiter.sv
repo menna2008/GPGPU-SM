@@ -7,21 +7,16 @@ module mem_arbiter #(
     // I$ and D$ cache controls
     input logic i_cache_req_valid,
     input logic d_cache_req_valid,
-    input logic i_cache_req_write,
     input logic d_cache_req_write,
     input logic [31:0] i_cache_req_addr,
     input logic [31:0] d_cache_req_addr,
     output logic i_cache_req_ready,
     output logic d_cache_req_ready,
 
-    // I$ and D$ cache write data
-    input logic i_cache_wvalid,
+    // D$ cache write data
     input logic d_cache_wvalid,
-    input logic i_cache_wlast,
     input logic d_cache_wlast,
-    input logic [MEM_W-1:0] i_cache_wdata,
     input logic [MEM_W-1:0] d_cache_wdata,
-    output logic i_cache_wready,
     output logic d_cache_wready,
 
     // I$ and D$ cache read data
@@ -68,17 +63,15 @@ module mem_arbiter #(
     assign sel_valid = (i_cache_req_valid || d_cache_req_valid);
 
     assign arb_cmd_valid = (state == IDLE) && sel_valid;
-    assign arb_cmd_write = (sel == ICACHE) ? i_cache_req_write : d_cache_req_write;
+    assign arb_cmd_write = (sel == ICACHE) ? 1'b0 : d_cache_req_write;
     assign arb_cmd_addr = (sel == ICACHE) ? i_cache_req_addr : d_cache_req_addr;
 
     assign i_cache_req_ready = (state == IDLE) && sel_valid && (sel == ICACHE) && arb_cmd_ready;
     assign d_cache_req_ready = (state == IDLE) && sel_valid && (sel == DCACHE) && arb_cmd_ready;
 
-    assign arb_wvalid = (state == WDATA) && ((owner == ICACHE) ? i_cache_wvalid : d_cache_wvalid);
-    assign arb_wdata = (owner == ICACHE) ? i_cache_wdata : d_cache_wdata;
+    assign arb_wvalid = (state == WDATA) && ((owner == ICACHE) ? 1'b0 : d_cache_wvalid);
+    assign arb_wdata = (owner == ICACHE) ? {MEM_W{1'b0}} : d_cache_wdata;
     assign d_cache_wready = (state == WDATA && owner == DCACHE && arb_wready);
-    assign i_cache_wready = ((state == WDATA) && owner == ICACHE && arb_wready);
-
 
     logic beat_valid;
     assign beat_valid = (state == RDATA) && rsp_valid;
@@ -107,8 +100,7 @@ module mem_arbiter #(
                     end
                 end
                 WDATA : begin
-                    if (arb_wvalid && arb_wready && 
-                    ((owner == ICACHE && i_cache_wlast) || (owner == DCACHE && d_cache_wlast)))
+                    if (arb_wvalid && arb_wready && owner == DCACHE && d_cache_wlast)
                         state <= IDLE;
                 end
                 RDATA : begin
