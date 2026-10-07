@@ -30,7 +30,8 @@ module int_alu (
     output logic is_load,
     output logic is_store,
     output logic [31:0] branch_pc_out,
-    output logic [5:0] push2_pc_recon_offset
+    output logic [5:0] push2_pc_recon_offset,
+    output logic [31:0] src2_out // for store instruction
 );
     // Define parameters for instruction types
     localparam R_TYPE = 3'b000, I_TYPE = 3'b001, FMA = 3'b010, BRANCH = 3'b011, DONE = 3'b111;
@@ -104,6 +105,7 @@ module int_alu (
             valid_out <= 1'b0;
             branch_pc_out <= 32'b0;
             push2_pc_recon_offset <= 6'b0;
+            src2_out <= 32'b0;
             reg_bank_addr_out <= 10'b0;
         end else begin
             sub_warp_cycle_out <= sub_warp_cycle_in;
@@ -114,6 +116,7 @@ module int_alu (
             valid_out <= valid_in;
             branch_pc_out <= branch_pc_in;
             push2_pc_recon_offset <= offset[5:0];
+            src2_out <= src2;
             reg_bank_addr_out <= reg_bank_addr_in;
         end
     end
