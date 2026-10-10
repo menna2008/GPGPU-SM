@@ -3,6 +3,7 @@ module int_alu (
     input logic clk,
     input logic reset,
     input logic valid_in,
+    input logic buffer_full,
     input logic sub_warp_valid_in,
     input logic [1:0] sub_warp_cycle_in,
     input logic [9:0] reg_bank_addr_in,
@@ -55,7 +56,7 @@ module int_alu (
         if (reset) begin
             branch_taken <= 1'b0;
             result <= 32'b0;
-        end else begin
+        end else if (!buffer_full) begin
             branch_taken <= 1'b0;
             case (opcode[5:3]) // case by opcode
                 R_TYPE : case (opcode[2:0]) // case by sub opcode
@@ -107,7 +108,7 @@ module int_alu (
             push2_pc_recon_offset <= 6'b0;
             src2_out <= 32'b0;
             reg_bank_addr_out <= 10'b0;
-        end else begin
+        end else if (!buffer_full) begin
             sub_warp_cycle_out <= sub_warp_cycle_in;
             sub_warp_valid_out <= sub_warp_valid_in;
             is_branch <= (opcode[5:3] == BRANCH);
