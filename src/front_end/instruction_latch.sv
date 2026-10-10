@@ -1,6 +1,7 @@
 module instruction_latch (
     input logic clk,
     input logic reset,
+    input logic buffer_full,
 
     input logic consume,
     input logic [1:0] sub_warp_cycle,
@@ -23,16 +24,18 @@ module instruction_latch (
             src1_addr <= 10'b0;
             src2_addr <= 10'b0;
             src3_addr <= 10'b0;
-        end else if (consume) begin
-            instr_q <= buf_instr;
-            instr_pc_q <= buf_instr_pc;
-            src1_addr <= {next_warp, sub_warp_cycle, buf_instr[25:21]};
-            src2_addr <= {next_warp, sub_warp_cycle, buf_instr[20:16]};
-            src3_addr <= {next_warp, sub_warp_cycle, buf_instr[15:11]};
-        end else begin
-            src1_addr <= {curr_warp, sub_warp_cycle, instr_q[25:21]};
-            src2_addr <= {curr_warp, sub_warp_cycle, instr_q[20:16]};
-            src3_addr <= {curr_warp, sub_warp_cycle, instr_q[15:11]};
+        end else if (!buffer_full) begin
+            if (consume) begin
+                instr_q <= buf_instr;
+                instr_pc_q <= buf_instr_pc;
+                src1_addr <= {next_warp, sub_warp_cycle, buf_instr[25:21]};
+                src2_addr <= {next_warp, sub_warp_cycle, buf_instr[20:16]};
+                src3_addr <= {next_warp, sub_warp_cycle, buf_instr[15:11]};
+            end else begin
+                src1_addr <= {curr_warp, sub_warp_cycle, instr_q[25:21]};
+                src2_addr <= {curr_warp, sub_warp_cycle, instr_q[20:16]};
+                src3_addr <= {curr_warp, sub_warp_cycle, instr_q[15:11]};
+            end
         end
     end
 endmodule
