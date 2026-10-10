@@ -1,8 +1,10 @@
 `default_nettype none
+`timescale 1ns/1ps
 module fp32_fma(
     input logic clk,
     input logic reset,
     input logic valid_in,
+    input logic buffer_full,
 
     // Input source registers
     input logic [31:0] src1,
@@ -51,7 +53,7 @@ module fp32_fma(
     logic [47:0] mant_mul_q;
     logic [8:0] exp_mul_q;
     logic sign_mul_q;
-    logic [9:0] logic_bank_addr_q;
+    logic [9:0] reg_bank_addr_q;
     logic [23:0] mant3_q;
     logic [7:0] exp3_q;
     logic sign3_q;
@@ -66,7 +68,7 @@ module fp32_fma(
             mant3_q <= 24'b0;
             exp3_q <= 8'b0;
             sign3_q <= 1'b0;
-        end else begin
+        end else if (!buffer_full) begin
             valid_mul_q <= valid_in;
             mant_mul_q <= mant_mul;
             exp_mul_q <= exp_mul;
@@ -95,7 +97,7 @@ module fp32_fma(
     logic [23:0] mant3_aligned, mant_mul_aligned, shift_source;
     logic alignment_guard, alignment_round, alignment_sticky;
     
-    assign product_ge_addened = (exp_mul_norm >= exp3_q);
+    assign product_ge_addened = (exp_mul_norm >= {1'b0, exp3_q});
     assign exp_diff = product_ge_addened ? (exp_mul_norm - exp3_q) : (exp3_q - exp_mul_norm);
     assign shift_source = product_ge_addened ? mant3_q : mant_mul_norm;
 
@@ -117,7 +119,7 @@ module fp32_fma(
                            ? mant_mul_norm
                            : (exp_diff >= 24) ? 24'b0 : (mant_mul_norm >> exp_diff);
 
-    assign exp_aligned = product_ge_addened ? exp_mul_norm : exp3_q;
+    assign exp_aligned = product_ge_addened ? exp_mul_norm : {1'b0, exp3_q};
 
     logic valid_aligned_q;
     logic sign_aligned_q;
@@ -142,7 +144,7 @@ module fp32_fma(
             alignment_round_q <= 1'b0;
             alignment_sticky_q <= 1'b0;
             reg_bank_addr_aligned_q <= 10'b0;
-        end else begin
+        end else if (!buffer_full) begin
             valid_aligned_q <= valid_mul_q;
             sign3_aligned_q <= sign3_q;
             sign_aligned_q <= sign_mul_q;
@@ -160,7 +162,6 @@ module fp32_fma(
     logic sign_add, same_sign, mul_ge_addend;
     logic [24:0] addition, result_add;
     logic [23:0] subtraction;
-    logic [8:0] add_exp;
 
     assign same_sign = (sign3_aligned_q == sign_aligned_q);
     assign mul_ge_addend = (mant_mul_aligned_q >= mant3_aligned_q);
@@ -191,7 +192,7 @@ module fp32_fma(
             round_add_q <= 1'b0;
             sticky_add_q <= 1'b0;
             reg_bank_addr_add_q <= 10'b0;
-        end else begin
+        end else if (!buffer_full) begin
             valid_add_q <= valid_aligned_q;
             mant_add_q <= result_add;
             exp_add_q <= exp_aligned_q;
@@ -256,9 +257,9 @@ module fp32_fma(
 
     assign result_exp_norm = overflow
                              ? (exp_add_q + 1) :
-                             is_true_zero ? 9'b0  : (exp_add_q - lz_count);
+                             is_true_zero ? 9'b0  : (exp_add_q - {4'b0, lz_count});
     
-    assign exp_underflow = !overflow && (lz_count >= exp_add_q); // negative (sign bit set on 9-bit) or exactly 0
+    assign exp_underflow = !overflow && ({4'b0, lz_count} >= exp_add_q); // negative (sign bit set on 9-bit) or exactly 0
     assign exp_overflow  = overflow && (result_exp_norm > 9'd255);
 
     assign result_norm_final = (is_true_zero || exp_underflow) ? 24'b0
@@ -292,7 +293,7 @@ module fp32_fma(
             norm_exp_overflow_q <= 1'b0;
             norm_reg_bank_addr_q <= 10'b0;
             norm_is_true_zero_q <= 1'b0;
-        end else begin
+        end else if (!buffer_full) begin
             norm_mant_q <= result_norm_final;
             norm_exp_q <= result_exp_final;
             norm_sign_q <= sign_add_q;
@@ -321,8 +322,8 @@ module fp32_fma(
     assign result_round = norm_mant_q + {23'b0, round_up};
     assign rounding_overflow = result_round[24];
 
-    assign result_round_final = rounding_overflow ? {1'b1, 23'b0} : result_round;
-    assign result_exp_rounded = rounding_overflow ? ({1'b0, norm_exp_q} + 9'd1) : norm_exp_q;
+    assign result_round_final = rounding_overflow ? {1'b1, 23'b0} : result_round[23:0];
+    assign result_exp_rounded = rounding_overflow ? ({1'b0, norm_exp_q} + 9'd1) : {1'b0, norm_exp_q};
 
     assign final_exp_overflow  = norm_exp_overflow_q || (!norm_is_true_zero_q && !norm_exp_underflow_q && (result_exp_rounded > 9'd255));
     assign final_exp_underflow = norm_exp_underflow_q;

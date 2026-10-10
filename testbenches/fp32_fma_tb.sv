@@ -1,12 +1,12 @@
 `timescale 1ns/1ps
 module fp32_fma_tb;
     // Declare DUT (Design Under Test) inputs and outputs
-    reg clk, reset, valid_in;
-    reg [31:0] src1, src2, src3;
-    wire [31:0] result;
-    wire valid_out;
-    reg [9:0] reg_bank_addr_in;
-    wire [9:0] reg_bank_addr_out;
+    logic clk, reset, valid_in;
+    logic [31:0] src1, src2, src3;
+    logic [31:0] result;
+    logic valid_out, buffer_full;
+    logic [9:0] reg_bank_addr_in;
+    logic [9:0] reg_bank_addr_out;
 
     integer errors = 0;
     integer tests = 0;
@@ -16,6 +16,7 @@ module fp32_fma_tb;
         .clk(clk),
         .reset(reset),
         .valid_in(valid_in),
+        .buffer_full(buffer_full),
         .src1(src1),
         .src2(src2),
         .src3(src3),
@@ -52,6 +53,136 @@ module fp32_fma_tb;
             end else begin
                 $display("PASS | result = %h tag = %h",
                         result, reg_bank_addr_out);
+            end
+
+            @(negedge clk);
+        end
+    endtask
+
+    task automatic check_stall(input integer cycles);
+        logic [31:0] held_result;
+        logic held_valid;
+        logic [9:0] held_addr;
+
+        logic [3:0] held_stage_valids;
+        logic [9:0] held_addr_mul, held_addr_align;
+        logic [9:0] held_addr_add;
+
+        begin
+            buffer_full = 1'b1;
+
+            held_result = result;
+            held_valid = valid_out;
+            held_addr = reg_bank_addr_out;
+
+            held_stage_valids = {
+                dut.valid_mul_q,
+                dut.valid_aligned_q,
+                dut.valid_add_q,
+                dut.norm_valid_q
+            };
+
+            held_addr_mul = dut.reg_bank_addr_q;
+            held_addr_align = dut.reg_bank_addr_aligned_q;
+            held_addr_add = dut.reg_bank_addr_add_q;
+
+            repeat (cycles) begin
+                @(posedge clk);
+                #1;
+
+                tests++;
+
+                if (result !== held_result ||
+                    valid_out !== held_valid ||
+                    reg_bank_addr_out !== held_addr ||
+                    {dut.valid_mul_q,
+                    dut.valid_aligned_q,
+                    dut.valid_add_q,
+                    dut.norm_valid_q} !== held_stage_valids ||
+                    dut.reg_bank_addr_q !== held_addr_mul ||
+                    dut.reg_bank_addr_aligned_q !== held_addr_align ||
+                    dut.reg_bank_addr_add_q !== held_addr_add) begin
+
+                    errors++;
+                    $display("FAIL | FMA pipeline changed while stalled");
+
+                end else begin
+                    $display("PASS | FMA pipeline held during stall");
+                end
+            end
+
+            @(negedge clk);
+            buffer_full = 1'b0;
+        end
+    endtask
+
+    task automatic test_full_pipeline_stall;
+        logic [31:0] expected_results [0:3];
+        logic [9:0] expected_tags [0:3];
+
+        begin
+            $display("\nTEST: Full pipeline stall");
+
+            expected_results[0] = 32'h40F00000; // 7.5
+            expected_results[1] = 32'h40900000; // 4.5
+            expected_results[2] = 32'hC0900000; // -4.5
+            expected_results[3] = 32'hC0B00000; // -5.5
+
+            expected_tags[0] = 10'h201;
+            expected_tags[1] = 10'h202;
+            expected_tags[2] = 10'h203;
+            expected_tags[3] = 10'h204;
+
+            // Issue four consecutive operations.
+
+            @(negedge clk);
+            valid_in = 1'b1;
+            src1 = 32'h40400000;
+            src2 = 32'h40000000;
+            src3 = 32'h3FC00000;
+            reg_bank_addr_in = expected_tags[0];
+
+            @(negedge clk);
+            src3 = 32'hBFC00000;
+            reg_bank_addr_in = expected_tags[1];
+
+            @(negedge clk);
+            src1 = 32'hC0400000;
+            src3 = 32'h3FC00000;
+            reg_bank_addr_in = expected_tags[2];
+
+            @(negedge clk);
+            src3 = 32'h3F000000;
+            reg_bank_addr_in = expected_tags[3];
+
+            @(negedge clk);
+            valid_in = 1'b0;
+            buffer_full = 1'b1;
+
+            // All four operations are now in the pipeline.
+            check_stall(4);
+
+            // Verify that all four results emerge in order.
+            for (int i = 0; i < 4; i++) begin
+                if (i != 0) begin
+                    @(posedge clk);
+                    #1;
+                end
+
+                tests++;
+
+                if (valid_out !== 1'b1 ||
+                    result !== expected_results[i] ||
+                    reg_bank_addr_out !== expected_tags[i]) begin
+
+                    errors++;
+                    $display("FAIL | Operation %0d expected %h tag %h, got %h tag %h",
+                            i, expected_results[i], expected_tags[i],
+                            result, reg_bank_addr_out);
+                end else begin
+                    $display("PASS | Operation %0d result %h tag %h",
+                            i, result, reg_bank_addr_out);
+                end
             end
 
             @(negedge clk);
@@ -120,6 +251,8 @@ module fp32_fma_tb;
         // -5.5 = 1_10000001_01100000000000000000000 = 0xC0B00000
         check_case(32'hC0400000, 32'h40000000, 32'h3F000000, 32'hC0B00000, 10'h009);
 
+        test_full_pipeline_stall();
+
         $display("---------------------------------------------");
         $display("Tests: %0d  Errors: %0d", tests, errors);
         if (errors == 0)
@@ -129,5 +262,4 @@ module fp32_fma_tb;
 
         $finish;
     end
-
 endmodule
