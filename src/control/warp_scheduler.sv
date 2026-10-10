@@ -11,10 +11,9 @@ module warp_scheduler #(
     input logic [2:0] commit_warp_id,
     input logic [NUM_WARPS-1:0] push2_done,
 
-    input logic coalescing_busy,
-
     input logic [1:0] sub_warp_cycle,
     input logic sub_warp_valid,
+    input logic buffer_full,
 
     input logic done_detect,
 
@@ -51,7 +50,7 @@ module warp_scheduler #(
     logic [2:0] next_warp_d;
     logic next_valid_d;
     always_comb begin
-        if (ready_mask[curr_warp] && !coalescing_busy) begin
+        if (ready_mask[curr_warp]) begin
             next_warp_d = curr_warp;
             next_valid_d = 1'b1;
         end else if (have_ready) begin
@@ -64,7 +63,7 @@ module warp_scheduler #(
     end
 
     logic decision;
-    assign decision = (sub_warp_cycle == 2'd0 && sub_warp_valid);
+    assign decision = (sub_warp_cycle == 2'd0 && sub_warp_valid && !buffer_full);
 
     always_ff @(posedge clk) begin
         if (reset) begin

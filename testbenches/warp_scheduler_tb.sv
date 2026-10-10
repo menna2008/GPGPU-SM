@@ -8,7 +8,6 @@ module tb_warp_scheduler;
     logic commit_done;
     logic [2:0] commit_warp_id;
     logic [NUM_WARPS-1:0] push2_done;
-    logic coalescing_busy;
     logic [1:0] sub_warp_cycle;
     logic sub_warp_valid;
     logic done_detect;
@@ -43,7 +42,6 @@ module tb_warp_scheduler;
         .commit_done(commit_done),
         .commit_warp_id(commit_warp_id),
         .push2_done(push2_done),
-        .coalescing_busy(coalescing_busy),
         .sub_warp_cycle(sub_warp_cycle),
         .sub_warp_valid(sub_warp_valid),
         .done_detect(done_detect),
@@ -68,7 +66,6 @@ module tb_warp_scheduler;
         commit_done = 1'b0;
         commit_warp_id = 3'd0;
         push2_done = '0;
-        coalescing_busy = 1'b0;
         fetch_valid = 1'b1;
         buffer_full = 1'b0;
         done_detect = 1'b0;

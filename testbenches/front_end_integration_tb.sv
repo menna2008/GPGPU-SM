@@ -134,7 +134,6 @@ module tb_frontend_integration;
         .commit_done(commit_done_auto),
         .commit_warp_id(commit_warp_auto),
         .push2_done(recon_push2_done_arr),
-        .coalescing_busy(1'b0),
         .sub_warp_cycle(swc_cycle),
         .sub_warp_valid(swc_valid),
         .done_detect(dec_done_detect),
