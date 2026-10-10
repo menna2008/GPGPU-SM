@@ -116,7 +116,7 @@ module recon_stack # (
     assign stack_full = (next_free >= DEPTH - 1);
     assign push2_done = push2_valid && !stack_full;
 
-    `ifdef SIMULATION
+    `ifdef SYNTHESIS
     always_ff @(posedge clk) begin
         if (!reset) begin
             assert($onehot0({init_push, push2_valid, pop_valid}))

@@ -82,14 +82,14 @@ module writeback_arbiter (
     logic lsu_push, fma_push, alu_push, special_reg_push;
     logic buffer_pop;
 
-    assign lsu_push = lsu_valid && !grant_lsu_curr;
-    assign fma_push = fma_valid && !grant_fma_curr;
-    assign alu_push = alu_writeback_valid && !grant_alu_curr;
-    assign special_reg_push = special_reg_valid && !grant_special_reg_curr;
+    assign lsu_push = !buffer_full && lsu_valid && !grant_lsu_curr;
+    assign fma_push = !buffer_full && fma_valid && !grant_fma_curr;
+    assign alu_push = !buffer_full && alu_writeback_valid && !grant_alu_curr;
+    assign special_reg_push = !buffer_full && special_reg_valid && !grant_special_reg_curr;
 
     assign buffer_pop = grant_buffer;
 
-    fifo #(.DEPTH(8)) buffer (
+    fifo #(.DEPTH(16)) buffer (
         .clk(clk),
         .reset(reset),
         

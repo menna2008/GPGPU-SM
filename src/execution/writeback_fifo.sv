@@ -77,4 +77,16 @@ module fifo #(
             count_q <= count_q + push_count - pop;
         end
     end
+
+    `ifndef SYNTHESIS
+    always_ff @(posedge clk) begin
+        if (!reset) begin
+            assert (count_q + push_count <= DEPTH + pop)
+                else $fatal(1, "Writeback FIFO overflow!");
+
+            assert (!(pop && empty))
+                else $fatal(1, "Writeback FIFO underflow!");
+        end
+    end
+    `endif
 endmodule
