@@ -20,7 +20,7 @@ module writeback_arbiter (
     input logic lsu_valid,
     input logic special_reg_valid,
 
-    //
+    // alu signal instructions
     input logic is_branch,
     input logic is_load,
     input logic is_store,
@@ -51,7 +51,7 @@ module writeback_arbiter (
 
     assign grant_buffer = !buffer_empty;
 
-    assign grant_lsu_curr = buffer_empty && lsu_valid && is_load;
+    assign grant_lsu_curr = buffer_empty && lsu_valid;
     assign grant_fma_curr = buffer_empty && !lsu_valid && fma_valid;
     assign grant_alu_curr = buffer_empty && !lsu_valid && !fma_valid && alu_writeback_valid;
     assign grant_special_reg_curr = buffer_empty && !lsu_valid && !fma_valid && !alu_writeback_valid && special_reg_valid;
