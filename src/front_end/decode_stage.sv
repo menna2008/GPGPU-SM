@@ -2,6 +2,7 @@ module decode_stage (
     input logic clk,
     input logic reset,
 
+    input logic buffer_full,
     input logic sub_warp_valid,
     input logic [1:0] sub_warp_cycle,
     input logic [2:0] curr_warp,
@@ -46,7 +47,7 @@ module decode_stage (
         if (reset) begin
             sub_warp_cycle_prev <= 2'b0;
             sub_warp_valid_prev <= 1'b0;
-        end else begin
+        end else if (!buffer_full) begin
             sub_warp_cycle_prev <= sub_warp_cycle;
             sub_warp_valid_prev <= sub_warp_valid;
         end
@@ -101,7 +102,7 @@ module decode_stage (
             dest_addr_q <= 10'b0;
             imm_q <= 16'b0;
             instr_pc_q <= 32'b0;
-        end else begin
+        end else if (!buffer_full) begin
             sub_warp_valid_q <= sub_warp_valid_prev;
             sub_warp_cycle_q <= sub_warp_cycle_prev;
             opcode_q <= opcode;

@@ -13,7 +13,7 @@ module special_reg_unit # (
 
     // Output warp_id, thread_slot, and dest_register for writeback_arbiter
     // This is simply the input passed to the output
-    output logic [9:0] reg_bank_addr_out
+    output logic [9:0] reg_bank_addr_out,
 
     input logic valid_in,
     output logic valid_out
